@@ -1,0 +1,75 @@
+@baseUrl = http://localhost:3000/api/auth
+@token = {{"eyJhbGciOiJSUzI1NiIsImtpZCI6IjQ3YWU0OWM0YzlkM2ViODVhNTI1NDA3MmMzMGQyZThlNzY2MWVmZTEiLCJ0eXAiOiJKV1QifQ.eyJuYW1lIjoiVGVzdCBVc2VyIiwiaXNzIjoiaHR0cHM6Ly9zZWN1cmV0b2tlbi5nb29nbGUuY29tL3F1b3Rlc2FwcC0yNmY4NCIsImF1ZCI6InF1b3Rlc2FwcC0yNmY4NCIsImF1dGhfdGltZSI6MTc1MjExMDI1MywidXNlcl9pZCI6InFHdlh6ZTd5czNkZ3M1QVpjdWNaMHhtV2dUdDEiLCJzdWIiOiJxR3ZYemU3eXMzZGdzNUFaY3VjWjB4bVdnVHQxIiwiaWF0IjoxNzUyMTEwMjUzLCJleHAiOjE3NTIxMTM4NTMsImVtYWlsIjoibS5kYW11Y2hpLmtlQGdtYWlsLmNvbSIsImVtYWlsX3ZlcmlmaWVkIjp0cnVlLCJmaXJlYmFzZSI6eyJpZGVudGl0aWVzIjp7ImVtYWlsIjpbIm0uZGFtdWNoaS5rZUBnbWFpbC5jb20iXX0sInNpZ25faW5fcHJvdmlkZXIiOiJwYXNzd29yZCJ9fQ.mj-eYoJROSpV-ZF5TX7qoTD_iphgcS3v0Ca6Bnl4XjW4ZtEu0wErBdXozF-hzQsXxW2qEKY8VosRh9RG-S2X1fDWM6hoBi-rf-NZdoin6Il-oghxQwldhEBR2opdtJglhxGR2HsSo1bQ7DgUyOFW3Llg3dXA_W7nbaR_wClR0cg3lp_S-Rf7BXnWOZ_ZoQRKBGOMuxO-6QoHwnbDpSLxbWqN08JBnsxL5TztG8ixgAbddGM8VnVpHkjgVugaa5hAYnJqvI0DZvoaq0VoZ1vVU2kOm_E0gebL0qh3Uz7-eDOC5ofeI58dKZ9baRd911yZncuFUMkQhxp7Re_PVc4Iig"}} 
+### ✅ Register a New User
+POST {{baseUrl}}/register
+Content-Type: application/json
+
+{
+  "email": "miriamatieno09@gmail.com",
+  "password": "Strong@Pass123!",
+  "name": "Miriam Atieno"
+}
+
+###
+
+### ✅ Register a New User
+POST {{baseUrl}}/register
+Content-Type: application/json
+
+{
+  "email": "user@invalid-domain-zz123.com",
+  "password": "StrongPass123!",
+  "name": "Fake User"
+}
+
+###
+
+
+### 🔐 Login User
+POST {{baseUrl}}/login
+Content-Type: application/json
+
+{
+  "email": "m.damuchi.ke@gmail.com",
+  "password": "Strong@Pass123!"
+}
+
+###
+
+### 🧪 Get Current Authenticated User (Protected)
+GET {{baseUrl}}/me
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+###
+
+### 🚪 Logout (optional if session token is handled server-side)
+POST {{baseUrl}}/logout
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+### VERIFY EMAIL LINK
+POST http://localhost:3000/api/verify-email-link
+Content-Type: application/json
+
+{
+  "oobCode": "I3kLEhuTu6XOG8mkHt2MH_Xvz62CI0dXNvjH9pH7qHAAAAGYGA5PDg",
+  "uid": "1aOYyZblVcQZLNxPFZioxCnLXsN2",
+  "email": "m.damuchi.ke@gmail.com"
+}
+
+### Resend Verification Email
+POST http://localhost:3000/api/resend-verification-email
+Content-Type: application/json
+
+{
+  "email": "m.damuchi.ke@gmail.com"
+}
+
+###
+POST http://localhost:3000/api/user/forgot-password
+Content-Type: application/json
+
+{
+  "email": "m.damuchi.ke@gmail.com"
+}

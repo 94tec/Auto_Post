@@ -1,0 +1,15 @@
+.glow-icon {
+  color: #171f55; /* dark blue color */
+  filter:
+    drop-shadow(0 0 6px #6c90c3)
+    drop-shadow(0 0 10px #6c90c3)
+    drop-shadow(0 0 20px #6c90c3);
+  transition: filter 0.3s ease-in-out;
+}
+
+.glow-icon:hover {
+  filter:
+    drop-shadow(0 0 8px #6c90c3)
+    drop-shadow(0 0 16px #6c90c3)
+    drop-shadow(0 0 32px #6c90c3);
+}

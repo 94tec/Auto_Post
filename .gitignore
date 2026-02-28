@@ -1,0 +1,23 @@
+
+.quote.http
+.auth.http
+*.json
+.env
+.quotesapp-26f84-firebase-adminsdk-fbsvc-d247cc6b4d.json
+
+
+
+# Node
+node_modules/
+server/node_modules/
+
+# Environment variables
+.env
+
+# Firebase keys
+*.json
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*

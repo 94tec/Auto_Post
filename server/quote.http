@@ -1,0 +1,45 @@
+@token = {{"eyJhbGciOiJSUzI1NiIsImtpZCI6IjQ3YWU0OWM0YzlkM2ViODVhNTI1NDA3MmMzMGQyZThlNzY2MWVmZTEiLCJ0eXAiOiJKV1QifQ.eyJuYW1lIjoiVGVzdCBVc2VyIiwiaXNzIjoiaHR0cHM6Ly9zZWN1cmV0b2tlbi5nb29nbGUuY29tL3F1b3Rlc2FwcC0yNmY4NCIsImF1ZCI6InF1b3Rlc2FwcC0yNmY4NCIsImF1dGhfdGltZSI6MTc1MjExNDUwMywidXNlcl9pZCI6InFHdlh6ZTd5czNkZ3M1QVpjdWNaMHhtV2dUdDEiLCJzdWIiOiJxR3ZYemU3eXMzZGdzNUFaY3VjWjB4bVdnVHQxIiwiaWF0IjoxNzUyMTE0NTAzLCJleHAiOjE3NTIxMTgxMDMsImVtYWlsIjoibS5kYW11Y2hpLmtlQGdtYWlsLmNvbSIsImVtYWlsX3ZlcmlmaWVkIjp0cnVlLCJmaXJlYmFzZSI6eyJpZGVudGl0aWVzIjp7ImVtYWlsIjpbIm0uZGFtdWNoaS5rZUBnbWFpbC5jb20iXX0sInNpZ25faW5fcHJvdmlkZXIiOiJwYXNzd29yZCJ9fQ.VhOgvTb-m6N0hoNf0IjT45YnxA4EZQmjPqXZiCvUwub9P532YgfxzBz0TVY3L4kk4Rh40WQofXTJT7QVHrG1VJdmFGYmeThLtmKnFqZzz8iY4j9CqUBCdD3SMg3-uxMlHJA0qO8a0ZwEt045FLj9gK5-9FzNHp90Rommrw-OuWY6t-BuMeyc8xHnh4SBa2XQygHCCq9YwvlC4YAqrY-7ti31dUqQqLHfAEJialb6I-vjFDmLDnfvtnUNtRcejOuvj9oR7kB5dapTSXwUG4DQpDEiuRdat7KvVOnLBlNJyoQnyPvtJfA9aMI4iN4XVA_JDPZlGeMGS3TRA1lSq-4THQ"}}
+
+
+### 1. Get All Quotes
+GET http://localhost:3000/api/quotes
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+###
+
+### 2. Get a Single Quote
+GET http://localhost:3000/api/quotes/{{-OUm9hn0CxuNs7F6jZ1G}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+###
+
+### 3. Create Quote (Requires Bearer Token)
+POST http://localhost:3000/api/quotes
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "text": "Discipline equals freedom.",
+  "author": "Jocko Willink"
+}
+
+###
+
+### 4. Update Quote (Requires Token)
+PUT http://localhost:3000/api/quotes/{{-OUm0OmiTnE6NsPqfoq5}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "text": "Updated quote content here.",
+  "author": "Updated Author"
+}
+
+###
+
+### 5. Delete Quote
+DELETE http://localhost:3000/api/quotes/{{-OUm9hn0CxuNs7F6jZ1G}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
