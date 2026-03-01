@@ -14,7 +14,7 @@ import { Router }              from 'express';
 import {
   getQuotes, getQuote, getMyQuotes,
   createQuote, updateQuote, deleteQuote,
-}                              from '../controllers/quoteController.js';
+}                              from '../controllers/quotes/quoteController.js';
 import {
   verifyToken, optionalAuth,
   requirePermission, requireActiveAccount,

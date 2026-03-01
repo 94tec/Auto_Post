@@ -6,7 +6,7 @@ import { Router }             from 'express';
 import {
   register, login, verifyEmail,
   resendVerification, getMe,
-}                             from '../controllers/authController.js';
+}                             from '../controllers/auth/authController.js';
 import { verifyToken }        from '../middlewares/auth.js';
 import { authRateLimiter }    from '../middlewares/rateLimiter.js';
 

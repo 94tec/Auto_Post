@@ -3,7 +3,8 @@
  * Self-profile reads/updates. Role and permission changes blocked here.
  */
 import { Router }              from 'express';
-import { getUserById, updateUser } from '../models/user.js';  // RTDB update
+import { getUserById
+ } from '../models/user.js';  // RTDB update
 import { updateDoc }           from 'firebase/firestore';
 import { doc }                 from 'firebase/firestore';
 import { firestore }           from '../config/firebase.js';

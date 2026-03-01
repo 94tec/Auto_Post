@@ -7,7 +7,7 @@
  */
 import { Router }  from 'express';
 import authRoutes  from './authRoutes.js';
-import quoteRoutes from './quoteRoutes.js';
+import quoteRoutes from './qouteRoutes.js';
 import userRoutes  from './userRoutes.js';
 import adminRoutes from './adminRoutes.js';
 

@@ -28,7 +28,7 @@ import {
   suspendUser, reactivateUser,
   getPendingWriteAccess,
   getAuditLogs, getStats,
-}                       from '../controllers/adminController.js';
+}                       from '../controllers/auth/adminController.js';
 import { verifyToken, requireAdmin } from '../middlewares/auth.js';
 import { adminRateLimiter }          from '../middlewares/rateLimiter.js';
 
