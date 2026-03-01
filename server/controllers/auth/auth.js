@@ -1,25 +1,25 @@
 //import admin from 'firebase-admin';
-import  userModel  from '../models/user.js';
-import { checkExistingUser, createUserAccount } from '../services/userService.js';
-import { sendVerificationEmail } from '../services/emailService.js';
+import  userModel  from '../../models/user.js';
+import { checkExistingUser, createUserAccount } from '../../services/userService.js';
+import { sendVerificationEmail } from '../../services/emailService.js';
 import {
    handleRegistrationError,
    getErrorResponse, 
    handleLoginError, 
    sendErrorResponse, 
    mapFirebaseError 
-} from '../utils/errorHandler.js';
+} from '../../utils/errorHandler.js';
 import {
   createSessionFingerprint,
   generateCSRFToken,
   validateEmail,
   validatePassword
-} from '../utils/authUtils.js'
-import { isValidEmail, isEmailDomainValid, isStrongPassword } from '../utils/validator.js';
-import AuditLog from '../services/auditLog.js';
-import { setSecurityHeaders } from '../utils/security.js';
+} from '../../utils/authUtils.js'
+import { isValidEmail, isEmailDomainValid, isStrongPassword } from '../../utils/validator.js';
+import AuditLog from '../../services/auditLog.js';
+import { setSecurityHeaders } from '../../utils/security.js';
 import { signOut } from 'firebase/auth';
-import { db,firebaseAuth,admin } from '../config/firebase.js';
+import { db,firebaseAuth,admin } from '../../config/firebase.js';
 
 import axios from 'axios';
 

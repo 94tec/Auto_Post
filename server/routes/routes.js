@@ -1,17 +1,22 @@
-// server/routes/routes.js`
-import express from 'express';
-import { register, login, logout } from '../controllers/auth.js';
-import { registrationLimiter, isLoginRateLimited} from '../middlewares/rateLimiter.js';
+/**
+ * routes/routes.js — Master router
+ *   /api/auth/*    public + auth actions
+ *   /api/quotes/*  quote CRUD (permission-gated)
+ *   /api/users/*   self-profile (authenticated)
+ *   /api/admin/*   admin-only (404 to non-admins)
+ */
+import { Router }  from 'express';
+import authRoutes  from './authRoutes.js';
+import quoteRoutes from './quoteRoutes.js';
+import userRoutes  from './userRoutes.js';
+import adminRoutes from './adminRoutes.js';
 
-const router = express.Router();
+const router = Router();
 
-// Auth Routes
-router.post('/register', registrationLimiter, register);
-router.post('/login',isLoginRateLimited, login);
-router.post('/logout', logout);
-
+router.use('/auth',   authRoutes);
+router.use('/quotes', quoteRoutes);
+router.use('/users',  userRoutes);
+router.use('/admin',  adminRoutes);
+router.get('/health', (_, res) => res.json({ ok: true, ts: new Date().toISOString() }));
 
 export default router;
-
-
-

@@ -1,15 +1,45 @@
-// server/routes/quote.routes.js
-import express from 'express';
-import { verifyToken } from '../middlewares/auth.js';
-import * as quoteCtrl from '../controllers/quote.js';
+/**
+ * routes/quoteRoutes.js
+ * ═══════════════════════════════════════════════════════════════════
+ * Permission matrix per route:
+ *   GET    /           optionalAuth           (guests can read)
+ *   GET    /my         verifyToken            (own quotes)
+ *   GET    /:id        optionalAuth
+ *   POST   /           verifyToken + activeAccount + write permission
+ *   PATCH  /:id        verifyToken + activeAccount + write permission
+ *   DELETE /:id        verifyToken + delete permission
+ * ═══════════════════════════════════════════════════════════════════
+ */
+import { Router }              from 'express';
+import {
+  getQuotes, getQuote, getMyQuotes,
+  createQuote, updateQuote, deleteQuote,
+}                              from '../controllers/quoteController.js';
+import {
+  verifyToken, optionalAuth,
+  requirePermission, requireActiveAccount,
+}                              from '../middlewares/auth.js';
+import { apiRateLimiter }      from '../middlewares/rateLimiter.js';
 
-const router = express.Router();
+const router = Router();
 
-// Define routes for quotes
-// Ensure all routes are protected by verifyToken middleware
-router.post("/", verifyToken, quoteCtrl.createQuote);
-router.get("/", verifyToken, quoteCtrl.getAllQuotes);
-router.put("/:id", verifyToken, quoteCtrl.updateQuote);
-router.delete("/:id", verifyToken, quoteCtrl.deleteQuote);
+router.get('/',    apiRateLimiter, optionalAuth, getQuotes);
+router.get('/my',  apiRateLimiter, verifyToken,  getMyQuotes);
+router.get('/:id', apiRateLimiter, optionalAuth, getQuote);
+
+router.post('/',
+  apiRateLimiter, verifyToken, requireActiveAccount, requirePermission('write'),
+  createQuote,
+);
+
+router.patch('/:id',
+  apiRateLimiter, verifyToken, requireActiveAccount, requirePermission('write'),
+  updateQuote,
+);
+
+router.delete('/:id',
+  apiRateLimiter, verifyToken, requirePermission('delete'),
+  deleteQuote,
+);
 
 export default router;

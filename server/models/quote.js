@@ -1,68 +1,75 @@
-// models/quote.js
-import { db } from '../config/firebase.js';
+/**
+ * models/quote.js
+ * ═══════════════════════════════════════════════════════════════════
+ * All Firestore operations for the quotes collection.
+ * Quotes are stored in Firestore for rich filtering/searching.
+ * ═══════════════════════════════════════════════════════════════════
+ */
 
-// Utility: Normalize quote text to avoid casing/space duplicates
-const normalizeText = (text) => {
-  return text.trim().toLowerCase().replace(/\s+/g, ' ');
-};
+import {
+  collection, doc, getDoc, getDocs, addDoc,
+  updateDoc, deleteDoc, query, where,
+  orderBy, limit, startAfter, serverTimestamp,
+} from 'firebase/firestore';
+import { firestore } from '../config/firebase.js';
 
-const quoteExists = async (text) => {
-  const normalized = normalizeText(text);
-  const snapshot = await db.ref('quotes')
-    .orderByChild('normalizedText')
-    .equalTo(normalized)
-    .once('value');
-  return snapshot.exists();
-};
+const quotesCol = () => collection(firestore, 'quotes');
+const quoteDoc  = (id) => doc(firestore, 'quotes', id);
 
-// ➕ Create a new unique quote
-const createQuote = async ({ text, author, uid }) => {
-  const normalized = normalizeText(text);
-  const newQuoteRef = db.ref('quotes').push();
-  await newQuoteRef.set({
-    text: text.trim(),
-    normalizedText: normalized,
-    author: author || 'Unknown',
-    uid,
-    createdAt: new Date().toISOString(),
+/* ── Create ─────────────────────────────────────────────────────── */
+export const createQuote = async ({ text, author, category, userId, createdBy }) => {
+  const ref = await addDoc(quotesCol(), {
+    text:      text.trim(),
+    author:    author.trim(),
+    category:  category?.trim() || 'general',
+    userId,
+    createdBy,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
   });
-  return newQuoteRef.key;
+  return { id: ref.id, text, author, category, userId, createdBy };
 };
 
-// 📄 Get all quotes
-const getAllQuotes = async () => {
-  const snapshot = await db.ref('quotes').once('value');
-  return snapshot.val() || {};
+/* ── Read ───────────────────────────────────────────────────────── */
+export const getQuoteById = async (id) => {
+  const snap = await getDoc(quoteDoc(id));
+  return snap.exists() ? { id: snap.id, ...snap.data() } : null;
 };
 
-// 📄 Get quote by ID
-const getQuoteById = async (id) => {
-  const snapshot = await db.ref(`quotes/${id}`).once('value');
-  return snapshot.exists() ? snapshot.val() : null;
+export const getQuotes = async ({ category, author, pageSize = 50, lastDoc } = {}) => {
+  const constraints = [orderBy('createdAt', 'desc'), limit(pageSize)];
+  if (category) constraints.push(where('category', '==', category));
+  if (lastDoc)  constraints.push(startAfter(lastDoc));
+
+  const q    = query(quotesCol(), ...constraints);
+  const snap = await getDocs(q);
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 };
 
-// ✏️ Update a quote by ID
-const updateQuote = async (id, data) => {
-  await db.ref(`quotes/${id}`).update(data);
+export const getQuotesByUser = async (userId) => {
+  const q    = query(quotesCol(), where('userId', '==', userId), orderBy('createdAt', 'desc'));
+  const snap = await getDocs(q);
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 };
 
-// ❌ Delete a quote by ID
-const deleteQuote = async (id) => {
-  const quoteRef = db.ref(`quotes/${id}`);
-  const snapshot = await quoteRef.once('value');
-
-  if (!snapshot.exists()) {
-    throw new Error('Quote not found');
-  }
-
-  await quoteRef.remove(); // ✅ this deletes the data
+export const quoteDuplicateExists = async (text) => {
+  const q    = query(quotesCol(), where('text', '==', text.trim()));
+  const snap = await getDocs(q);
+  return !snap.empty;
 };
-export {
-  createQuote,
-  getAllQuotes, 
-  getQuoteById,
-  updateQuote,
-  deleteQuote,
-  quoteExists,
-  normalizeText,
+
+/* ── Update ─────────────────────────────────────────────────────── */
+export const updateQuote = async (id, patch) => {
+  const allowed = {};
+  if (patch.text)     allowed.text     = patch.text.trim();
+  if (patch.author)   allowed.author   = patch.author.trim();
+  if (patch.category) allowed.category = patch.category.trim();
+  allowed.updatedAt = serverTimestamp();
+  await updateDoc(quoteDoc(id), allowed);
+  return { id, ...allowed };
+};
+
+/* ── Delete ─────────────────────────────────────────────────────── */
+export const deleteQuote = async (id) => {
+  await deleteDoc(quoteDoc(id));
 };

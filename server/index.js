@@ -1,54 +1,157 @@
-// server/index.js
+/**
+ * server.js
+ * ─────────────────────────────────────────────
+ * Damuchi API – Production Entry Point
+ *
+ * Architecture:
+ *   Explicit route mounting
+ *   Namespace isolation
+ *   Scoped middleware enforcement
+ *   Modular monolith ready
+ *
+ * Security:
+ *   - Helmet
+ *   - CORS restriction
+ *   - Rate limiting (admin scoped)
+ *   - JSON size limiting
+ *   - Trust proxy enabled
+ */
+
+import 'dotenv/config';
 import express from 'express';
-import cookieParser from 'cookie-parser';
-import cors from 'cors';
 import helmet from 'helmet';
-import dotenv from 'dotenv';
-import './config/firebase.js'; // Initialize Firebase
-dotenv.config();
-import authRoutes from './routes/routes.js';
-import quoteRoutes from './routes/qouteRoutes.js';
+import cors from 'cors';
+import morgan from 'morgan';
+import rateLimit from 'express-rate-limit';
+
+// ── Route Modules ────────────────────────────
+import authRoutes from './routes/authRoutes.js';
+import quoteRoutes from './routes/quoteRoutes.js';
 import userRoutes from './routes/userRoutes.js';
 import emailRoutes from './routes/emailRoutes.js';
+import adminRoutes from './routes/adminRoutes.js';
 
-const app = express();
-const PORT = process.env.PORT || 3000;
+// ── Middleware ───────────────────────────────
+import { notFound, errorHandler } from './utils/errorHandler.js';
+import { requireAdmin } from './middleware/requireAdmin.js';
 
-// Middleware
+class Server {
+  constructor() {
+    this.app = express();
+    this.PORT = process.env.PORT || 5000;
 
-app.use(helmet({
-  contentSecurityPolicy: {
-    directives: {
-      defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'", 'trusted.cdn.com'],
-      styleSrc: ["'self'", "'unsafe-inline'"],
-      imgSrc: ["'self'", 'data:', 'trusted.cdn.com'],
-      connectSrc: ["'self'", 'api.yourdomain.com']
-    }
-  },
-  hsts: {
-    maxAge: 63072000,
-    includeSubDomains: true,
-    preload: true
-  },
-  referrerPolicy: { policy: 'same-origin' }
-}));
+    this.initializeCore();
+    this.initializeSecurity();
+    this.initializeRoutes();
+    this.initializeErrorHandling();
+  }
 
-app.use(cors({
-    origin: 'http://localhost:3000',
-    credentials: true,
-  }));
-app.use(express.json());
-app.use(cookieParser(process.env.COOKIE_SECRET));
+  /* ─────────────────────────────────────────── */
+  /* Core configuration                          */
+  /* ─────────────────────────────────────────── */
 
-app.use('/api/auth', authRoutes); // Auth routes
-app.use("/api/quotes", quoteRoutes);
-app.use('/api/user', userRoutes); // User management routes
-app.use('/api', emailRoutes); // Email service routes
+  initializeCore() {
+    this.app.set('trust proxy', 1);
 
-// Start server
-app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
-});
+    this.app.use(express.json({ limit: '100kb' }));
+    this.app.use(express.urlencoded({ extended: false }));
+  }
 
+  /* ─────────────────────────────────────────── */
+  /* Security configuration                      */
+  /* ─────────────────────────────────────────── */
 
+  initializeSecurity() {
+    this.app.use(helmet());
+
+    this.app.use(cors({
+      origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
+      credentials: true,
+      methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS']
+    }));
+
+    this.app.use(
+      morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev')
+    );
+  }
+
+  /* ─────────────────────────────────────────── */
+  /* Route mounting (Explicit Namespaces)        */
+  /* ─────────────────────────────────────────── */
+
+  initializeRoutes() {
+
+    // Health check
+    this.app.get('/health', (_req, res) => {
+      res.status(200).json({
+        status: 'ok',
+        environment: process.env.NODE_ENV,
+        timestamp: Date.now()
+      });
+    });
+
+    /* ── Public + Authenticated Routes ─────── */
+
+    this.app.use('/api/auth', authRoutes);
+    this.app.use('/api/quotes', quoteRoutes);
+    this.app.use('/api/users', userRoutes);
+    this.app.use('/api/email', emailRoutes);
+
+    /* ── Admin Namespace (Isolated + Guarded) ─ */
+
+    const adminLimiter = rateLimit({
+      windowMs: 15 * 60 * 1000, // 15 minutes
+      max: 100,
+      standardHeaders: true,
+      legacyHeaders: false,
+      message: { error: 'Too many admin requests' }
+    });
+
+    this.app.use(
+      '/api/admin',
+      adminLimiter,
+      requireAdmin,      // namespace-level protection
+      adminRoutes
+    );
+  }
+
+  /* ─────────────────────────────────────────── */
+  /* Error handling                              */
+  /* ─────────────────────────────────────────── */
+
+  initializeErrorHandling() {
+    this.app.use(notFound);
+    this.app.use(errorHandler);
+  }
+
+  /* ─────────────────────────────────────────── */
+  /* Start server                                */
+  /* ─────────────────────────────────────────── */
+
+  start() {
+    this.app.listen(this.PORT, () => {
+      console.log(`
+┌────────────────────────────────────────────┐
+│  🚀 Damuchi API Running                    │
+│                                            │
+│  Port:        ${this.PORT}
+│  Environment: ${process.env.NODE_ENV}
+│                                            │
+│  Public:   /api/auth, /api/quotes          │
+│  User:     /api/users                      │
+│  Email:    /api/email                      │
+│  Admin:    /api/admin  (isolated)          │
+└────────────────────────────────────────────┘
+      `);
+    });
+  }
+}
+
+/* ─────────────────────────────────────────── */
+/* Bootstrap                                   */
+/* ─────────────────────────────────────────── */
+
+const server = new Server();
+server.start();
+
+export default server;
