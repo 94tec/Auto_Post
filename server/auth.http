@@ -1,55 +1,243 @@
-@baseUrl = http://localhost:3000/api/auth
-@token = {{"eyJhbGciOiJSUzI1NiIsImtpZCI6IjQ3YWU0OWM0YzlkM2ViODVhNTI1NDA3MmMzMGQyZThlNzY2MWVmZTEiLCJ0eXAiOiJKV1QifQ.eyJuYW1lIjoiVGVzdCBVc2VyIiwiaXNzIjoiaHR0cHM6Ly9zZWN1cmV0b2tlbi5nb29nbGUuY29tL3F1b3Rlc2FwcC0yNmY4NCIsImF1ZCI6InF1b3Rlc2FwcC0yNmY4NCIsImF1dGhfdGltZSI6MTc1MjExMDI1MywidXNlcl9pZCI6InFHdlh6ZTd5czNkZ3M1QVpjdWNaMHhtV2dUdDEiLCJzdWIiOiJxR3ZYemU3eXMzZGdzNUFaY3VjWjB4bVdnVHQxIiwiaWF0IjoxNzUyMTEwMjUzLCJleHAiOjE3NTIxMTM4NTMsImVtYWlsIjoibS5kYW11Y2hpLmtlQGdtYWlsLmNvbSIsImVtYWlsX3ZlcmlmaWVkIjp0cnVlLCJmaXJlYmFzZSI6eyJpZGVudGl0aWVzIjp7ImVtYWlsIjpbIm0uZGFtdWNoaS5rZUBnbWFpbC5jb20iXX0sInNpZ25faW5fcHJvdmlkZXIiOiJwYXNzd29yZCJ9fQ.mj-eYoJROSpV-ZF5TX7qoTD_iphgcS3v0Ca6Bnl4XjW4ZtEu0wErBdXozF-hzQsXxW2qEKY8VosRh9RG-S2X1fDWM6hoBi-rf-NZdoin6Il-oghxQwldhEBR2opdtJglhxGR2HsSo1bQ7DgUyOFW3Llg3dXA_W7nbaR_wClR0cg3lp_S-Rf7BXnWOZ_ZoQRKBGOMuxO-6QoHwnbDpSLxbWqN08JBnsxL5TztG8ixgAbddGM8VnVpHkjgVugaa5hAYnJqvI0DZvoaq0VoZ1vVU2kOm_E0gebL0qh3Uz7-eDOC5ofeI58dKZ9baRd911yZncuFUMkQhxp7Re_PVc4Iig"}} 
-### ✅ Register a New User
-POST {{baseUrl}}/register
+### ═══════════════════════════════════════════════════════════════════
+### auth.http  —  Damuchi / 94tec  |  Auth + Admin + Profile
+### Server: http://localhost:3000
+###
+### HOW TO USE
+###   1. node scripts/seedAdmin.js          ← create admin (once only)
+###   2. Sign in via Firebase client SDK    ← get an idToken
+###   3. POST /api/auth/login               ← exchange idToken for session
+###   4. Paste fresh tokens into @adminToken / @userToken below
+###   5. Run sections in order (1 → 13)
+###
+### FIXES from your original auth.http:
+###   ✗ @token = {{"..."}}  →  ✅ @adminToken = raw_token (no double-curly)
+###   ✗ login sent email+password  →  ✅ login expects idToken from Firebase SDK
+###   ✗ /api/verify-email-link  →  ✅ /api/auth/verify-email
+###   ✗ /api/resend-verification-email  →  ✅ /api/auth/resend-verification
+###   ✗ /api/user/forgot-password  →  ✅ not in refactored server (handle client-side)
+###   ✗ POST /logout  →  ✅ not needed (Firebase tokens are stateless; expire server-side)
+### ═══════════════════════════════════════════════════════════════════
+
+# ── Base URLs ─────────────────────────────────────────────────────────
+@host      = http://localhost:3000
+@authBase  = {{host}}/api/auth
+@adminBase = {{host}}/api/admin
+@userBase  = {{host}}/api/users
+
+# ── Tokens ────────────────────────────────────────────────────────────
+# Firebase ID tokens expire after 1 hour.
+# Re-run POST /api/auth/login to get a fresh one.
+@adminToken = PASTE_ADMIN_ID_TOKEN_HERE
+@userToken  = PASTE_USER_ID_TOKEN_HERE
+
+# ── UIDs ──────────────────────────────────────────────────────────────
+# Get these from GET /api/admin/users (Section 8)
+@guestUid   = PASTE_GUEST_UID_HERE
+@userUid    = PASTE_USER_UID_HERE
+
+
+### ═══════════════════════════════════════════════════════════════════
+###  SECTION 1  —  REGISTRATION
+###  All accounts start:  role=guest  status=pending
+###  The "role" field in the body is ignored — cannot self-assign admin
+### ═══════════════════════════════════════════════════════════════════
+
+### 1a. ✅ Register valid new user
+# → 201  { userId, role: "guest", status: "pending" }
+POST {{authBase}}/register
 Content-Type: application/json
 
 {
   "email": "miriamatieno09@gmail.com",
   "password": "Strong@Pass123!",
-  "name": "Miriam Atieno"
+  "displayName": "Miriam Atieno"
 }
 
 ###
 
-### ✅ Register a New User
-POST {{baseUrl}}/register
+### 1b. ✅ Register second test user
+# → 201
+POST {{authBase}}/register
+Content-Type: application/json
+
+{
+  "email": "testuser@damuchi.app",
+  "password": "Strong@Pass123!",
+  "displayName": "Test User"
+}
+
+###
+
+### 1c. ❌ Weak password (no uppercase, no special char)
+# → 400  { code: "WEAK_PASSWORD" }
+POST {{authBase}}/register
+Content-Type: application/json
+
+{
+  "email": "weakpass@test.com",
+  "password": "abc123",
+  "displayName": "Weak User"
+}
+
+###
+
+### 1d. ❌ Malformed email
+# → 400  { code: "INVALID_EMAIL" }
+POST {{authBase}}/register
+Content-Type: application/json
+
+{
+  "email": "not-an-email",
+  "password": "Strong@Pass123!",
+  "displayName": "Bad Email"
+}
+
+###
+
+### 1e. ❌ Unroutable domain — Firebase will reject
+# → 400/422
+POST {{authBase}}/register
 Content-Type: application/json
 
 {
   "email": "user@invalid-domain-zz123.com",
-  "password": "StrongPass123!",
-  "name": "Fake User"
+  "password": "Strong@Pass123!",
+  "displayName": "Fake User"
 }
 
 ###
 
-
-### 🔐 Login User
-POST {{baseUrl}}/login
+### 1f. ❌ Duplicate email
+# → 409  { code: "EMAIL_EXISTS" }
+POST {{authBase}}/register
 Content-Type: application/json
 
 {
-  "email": "m.damuchi.ke@gmail.com",
-  "password": "Strong@Pass123!"
+  "email": "miriamatieno09@gmail.com",
+  "password": "Strong@Pass123!",
+  "displayName": "Duplicate"
 }
 
 ###
 
-### 🧪 Get Current Authenticated User (Protected)
-GET {{baseUrl}}/me
-Authorization: Bearer {{token}}
+### 1g. ❌ Attempt to self-assign admin role
+# → 201 but role is silently overridden to "guest"
+POST {{authBase}}/register
 Content-Type: application/json
+
+{
+  "email": "sneakyadmin@test.com",
+  "password": "Strong@Pass123!",
+  "displayName": "Sneaky Admin",
+  "role": "admin"
+}
 
 ###
 
-### 🚪 Logout (optional if session token is handled server-side)
-POST {{baseUrl}}/logout
-Authorization: Bearer {{token}}
+### 1h. ❌ Missing required fields
+# → 400  { code: "MISSING_FIELDS" }
+POST {{authBase}}/register
 Content-Type: application/json
 
-### VERIFY EMAIL LINK
-POST http://localhost:3000/api/verify-email-link
+{
+  "displayName": "No Email Or Password"
+}
+
+###
+
+
+### ═══════════════════════════════════════════════════════════════════
+###  SECTION 2  —  LOGIN
+###
+###  The client signs in with Firebase SDK (browser/app), gets an idToken,
+###  then sends it here. The server verifies it with Firebase Admin SDK
+###  and returns the user's role + permissions from the database.
+###
+###  NOTE: Email+password are NOT sent to this server.
+###  That credential exchange happens inside Firebase SDK on the client.
+### ═══════════════════════════════════════════════════════════════════
+
+### 2a. ✅ Login with Firebase idToken from client SDK
+# → 200  { uid, role, status, emailVerified, adminApproved, permissions }
+POST {{authBase}}/login
+Content-Type: application/json
+
+{
+  "idToken": "PASTE_FIREBASE_ID_TOKEN_FROM_CLIENT_SDK_HERE"
+}
+
+###
+
+### 2b. ❌ Missing idToken field
+# → 400  { code: "MISSING_TOKEN" }
+POST {{authBase}}/login
+Content-Type: application/json
+
+{}
+
+###
+
+### 2c. ❌ Malformed token string
+# → 401  { code: "INVALID_TOKEN" }
+POST {{authBase}}/login
+Content-Type: application/json
+
+{
+  "idToken": "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.MALFORMED.SIGNATURE"
+}
+
+###
+
+
+### ═══════════════════════════════════════════════════════════════════
+###  SECTION 3  —  EMAIL VERIFICATION  (guest upgrade step 1 of 2)
+###
+###  User clicks email link → frontend extracts oobCode + uid + email
+###  → POST here → status: pending → awaiting
+###  → User added to Firestore approvalQueue
+###  Admin must then POST /approve (step 2) before account is active
+### ═══════════════════════════════════════════════════════════════════
+
+### 3a. ✅ Verify email with real oobCode from the email link
+# → 200  { success: true, status: "awaiting", message: "...awaiting admin approval" }
+POST {{authBase}}/verify-email
+Content-Type: application/json
+
+{
+  "oobCode": "PASTE_OOBCODE_FROM_VERIFICATION_EMAIL_LINK",
+  "uid": "PASTE_UID_OF_THE_REGISTERING_USER",
+  "email": "miriamatieno09@gmail.com"
+}
+
+###
+
+### 3b. ❌ Missing uid and email
+# → 400  { code: "INVALID_PARAMS" }
+POST {{authBase}}/verify-email
+Content-Type: application/json
+
+{
+  "oobCode": "someCode"
+}
+
+###
+
+### 3c. ❌ Already-consumed or invalid oobCode
+# → 404  { code: "INVALID_TOKEN" }
+POST {{authBase}}/verify-email
+Content-Type: application/json
+
+{
+  "oobCode": "INVALID_OR_ALREADY_CONSUMED_CODE",
+  "uid": "someUid",
+  "email": "test@test.com"
+}
+
+###
+
+### 3d. ❌ Expired oobCode from your original file (>24h old — will fail)
+# → 410  { code: "TOKEN_EXPIRED" }
+POST {{authBase}}/verify-email
 Content-Type: application/json
 
 {
@@ -58,8 +246,28 @@ Content-Type: application/json
   "email": "m.damuchi.ke@gmail.com"
 }
 
-### Resend Verification Email
-POST http://localhost:3000/api/resend-verification-email
+###
+
+
+### ═══════════════════════════════════════════════════════════════════
+###  SECTION 4  —  RESEND VERIFICATION EMAIL
+###  Rate limited: 1 resend per 2 minutes per email address
+### ═══════════════════════════════════════════════════════════════════
+
+### 4a. ✅ Resend to unverified registered email
+# → 200  { code: "SENT" }
+POST {{authBase}}/resend-verification
+Content-Type: application/json
+
+{
+  "email": "miriamatieno09@gmail.com"
+}
+
+###
+
+### 4b. ❌ Email already verified
+# → 200  { code: "ALREADY_VERIFIED" }
+POST {{authBase}}/resend-verification
 Content-Type: application/json
 
 {
@@ -67,9 +275,396 @@ Content-Type: application/json
 }
 
 ###
-POST http://localhost:3000/api/user/forgot-password
+
+### 4c. ❌ Non-existent email
+# → 200  { code: "POTENTIALLY_SENT" }  ← intentionally vague for security
+POST {{authBase}}/resend-verification
 Content-Type: application/json
 
 {
-  "email": "m.damuchi.ke@gmail.com"
+  "email": "nobody@nowhere.com"
 }
+
+###
+
+### 4d. ❌ Rate limit — run 4a twice within 2 minutes
+# → 429  { code: "RATE_LIMITED" }
+POST {{authBase}}/resend-verification
+Content-Type: application/json
+
+{
+  "email": "miriamatieno09@gmail.com"
+}
+
+###
+
+
+### ═══════════════════════════════════════════════════════════════════
+###  SECTION 5  —  GET CURRENT USER  (/api/auth/me)
+### ═══════════════════════════════════════════════════════════════════
+
+### 5a. ✅ Get current user session info
+# → 200  { uid, role, status, emailVerified, adminApproved, permissions }
+GET {{authBase}}/me
+Authorization: Bearer {{userToken}}
+
+###
+
+### 5b. ❌ No token
+# → 401  { code: "NO_TOKEN" }
+GET {{authBase}}/me
+
+###
+
+### 5c. ❌ Expired token — your old token from the original file
+# → 401  { code: "TOKEN_EXPIRED" }
+GET {{authBase}}/me
+Authorization: Bearer eyJhbGciOiJSUzI1NiIsImtpZCI6IjQ3YWU0OWM0YzlkM2ViODVhNTI1NDA3MmMzMGQyZThlNzY2MWVmZTEiLCJ0eXAiOiJKV1QifQ.eyJuYW1lIjoiVGVzdCBVc2VyIiwiaXNzIjoiaHR0cHM6Ly9zZWN1cmV0b2tlbi5nb29nbGUuY29tL3F1b3Rlc2FwcC0yNmY4NCIsImF1ZCI6InF1b3Rlc2FwcC0yNmY4NCIsImF1dGhfdGltZSI6MTc1MjExMDI1MywidXNlcl9pZCI6InFHdlh6ZTd5czNkZ3M1QVpjdWNaMHhtV2dUdDEiLCJzdWIiOiJxR3ZYemU3eXMzZGdzNUFaY3VjWjB4bVdnVHQxIiwiaWF0IjoxNzUyMTEwMjUzLCJleHAiOjE3NTIxMTM4NTMsImVtYWlsIjoibS5kYW11Y2hpLmtlQGdtYWlsLmNvbSIsImVtYWlsX3ZlcmlmaWVkIjp0cnVlLCJmaXJlYmFzZSI6eyJpZGVudGl0aWVzIjp7ImVtYWlsIjpbIm0uZGFtdWNoaS5rZUBnbWFpbC5jb20iXX0sInNpZ25faW5fcHJvdmlkZXIiOiJwYXNzd29yZCJ9fQ.mj-eYoJROSpV-ZF5TX7qoTD_iphgcS3v0Ca6Bnl4XjW4ZtEu0wErBdXozF-hzQsXxW2qEKY8VosRh9RG-S2X1fDWM6hoBi-rf-NZdoin6Il-oghxQwldhEBR2opdtJglhxGR2HsSo1bQ7DgUyOFW3Llg3dXA_W7nbaR_wClR0cg3lp_S-Rf7BXnWOZ_ZoQRKBGOMuxO-6QoHwnbDpSLxbWqN08JBnsxL5TztG8ixgAbddGM8VnVpHkjgVugaa5hAYnJqvI0DZvoaq0VoZ1vVU2kOm_E0gebL0qh3Uz7-eDOC5ofeI58dKZ9baRd911yZncuFUMkQhxp7Re_PVc4Iig
+
+###
+
+
+### ═══════════════════════════════════════════════════════════════════
+###  SECTION 6  —  USER SELF-PROFILE  (/api/users/profile)
+### ═══════════════════════════════════════════════════════════════════
+
+### 6a. ✅ Get own profile
+# → 200  { uid, displayName, email, role, status, permissions, lastLogin, createdAt }
+GET {{userBase}}/profile
+Authorization: Bearer {{userToken}}
+
+###
+
+### 6b. ✅ Update display name (only field users can self-change)
+# → 200  { message: "Profile updated", displayName: "..." }
+PATCH {{userBase}}/profile
+Authorization: Bearer {{userToken}}
+Content-Type: application/json
+
+{
+  "displayName": "Miriam K. Atieno"
+}
+
+###
+
+### 6c. ❌ Display name too short
+# → 400  { code: "INVALID_LENGTH" }
+PATCH {{userBase}}/profile
+Authorization: Bearer {{userToken}}
+Content-Type: application/json
+
+{
+  "displayName": "M"
+}
+
+###
+
+### 6d. ❌ Display name too long (over 50 chars)
+# → 400  { code: "INVALID_LENGTH" }
+PATCH {{userBase}}/profile
+Authorization: Bearer {{userToken}}
+Content-Type: application/json
+
+{
+  "displayName": "This Name Is Way Too Long To Be A Valid Display Name Here"
+}
+
+###
+
+
+### ═══════════════════════════════════════════════════════════════════
+###  SECTION 7  —  ADMIN: SYSTEM DASHBOARD
+###  Non-admins get 404 — route existence is hidden by design
+### ═══════════════════════════════════════════════════════════════════
+
+### 7a. ✅ System stats
+# → 200  { stats: { total, byRole, byStatus, awaitingApproval, awaitingWriteAccess } }
+GET {{adminBase}}/stats
+Authorization: Bearer {{adminToken}}
+
+###
+
+### 7b. ✅ Audit logs (last 100)
+# → 200  { logs: [...] }
+GET {{adminBase}}/audit-logs
+Authorization: Bearer {{adminToken}}
+
+###
+
+### 7c. ✅ Audit logs filtered to one user
+GET {{adminBase}}/audit-logs?userId={{guestUid}}&limit=20
+Authorization: Bearer {{adminToken}}
+
+###
+
+### 7d. ✅ Approval queue — guests who verified email, awaiting admin step 2
+# → 200  { queue: [...], total }
+GET {{adminBase}}/approval-queue
+Authorization: Bearer {{adminToken}}
+
+###
+
+### 7e. ✅ Pending write — active users who don't have write=true yet
+# → 200  { pending: [...], total }
+GET {{adminBase}}/pending-write
+Authorization: Bearer {{adminToken}}
+
+###
+
+### 7f. ❌ Admin route with a user token
+# → 404  { code: "NOT_FOUND" }  ← intentionally vague
+GET {{adminBase}}/stats
+Authorization: Bearer {{userToken}}
+
+###
+
+### 7g. ❌ Admin route with no token
+# → 404
+GET {{adminBase}}/stats
+
+###
+
+
+### ═══════════════════════════════════════════════════════════════════
+###  SECTION 8  —  ADMIN: USER LIST
+### ═══════════════════════════════════════════════════════════════════
+
+### 8a. ✅ All users
+# → 200  { users: [...], total }
+GET {{adminBase}}/users
+Authorization: Bearer {{adminToken}}
+
+###
+
+### 8b. ✅ Filter role=guest
+GET {{adminBase}}/users?role=guest
+Authorization: Bearer {{adminToken}}
+
+###
+
+### 8c. ✅ Filter role=user AND status=active
+GET {{adminBase}}/users?role=user&status=active
+Authorization: Bearer {{adminToken}}
+
+###
+
+### 8d. ✅ Filter status=awaiting
+GET {{adminBase}}/users?status=awaiting
+Authorization: Bearer {{adminToken}}
+
+###
+
+### 8e. ✅ Filter status=pending
+GET {{adminBase}}/users?status=pending
+Authorization: Bearer {{adminToken}}
+
+###
+
+### 8f. ✅ Single user detail — paste a real UID
+GET {{adminBase}}/users/{{guestUid}}
+Authorization: Bearer {{adminToken}}
+
+###
+
+### 8g. ❌ Non-existent UID
+# → 404  { code: "NOT_FOUND" }
+GET {{adminBase}}/users/nonexistent_uid_xyz
+Authorization: Bearer {{adminToken}}
+
+###
+
+
+### ═══════════════════════════════════════════════════════════════════
+###  SECTION 9  —  ADMIN: GUEST APPROVAL  (step 2 of 2)
+###
+###  If email IS already verified:
+###    → promoted=true, role=user, status=active  (immediate)
+###
+###  If email NOT yet verified:
+###    → promoted=false, adminApproved stored, promotion deferred
+###    → user finishes step 1 later → auto-promotes then
+### ═══════════════════════════════════════════════════════════════════
+
+### 9a. ✅ Approve guest with verified email (immediate promotion)
+# → 200  { promoted: true, role: "user", status: "active" }
+POST {{adminBase}}/users/{{guestUid}}/approve
+Authorization: Bearer {{adminToken}}
+
+###
+
+### 9b. ✅ Approve guest whose email is not yet verified
+# → 200  { promoted: false, status: "awaiting" }
+POST {{adminBase}}/users/UNVERIFIED_GUEST_UID_HERE/approve
+Authorization: Bearer {{adminToken}}
+
+###
+
+### 9c. ❌ Approve already-approved guest
+# → 200  { code: "ALREADY_APPROVED" }
+POST {{adminBase}}/users/{{guestUid}}/approve
+Authorization: Bearer {{adminToken}}
+
+###
+
+### 9d. ❌ Approve a non-guest (user with role=user)
+# → 400  { code: "NOT_GUEST" }
+POST {{adminBase}}/users/{{userUid}}/approve
+Authorization: Bearer {{adminToken}}
+
+###
+
+
+### ═══════════════════════════════════════════════════════════════════
+###  SECTION 10  —  ADMIN: WRITE ACCESS CONTROL
+###  User must be: role=user + status=active + emailVerified=true
+### ═══════════════════════════════════════════════════════════════════
+
+### 10a. ✅ Grant write access
+# → 200  { success: true }
+POST {{adminBase}}/users/{{userUid}}/grant-write
+Authorization: Bearer {{adminToken}}
+
+###
+
+### 10b. ✅ Revoke write access
+# → 200  { success: true }
+POST {{adminBase}}/users/{{userUid}}/revoke-write
+Authorization: Bearer {{adminToken}}
+
+###
+
+### 10c. ❌ Grant write to a guest
+# → 400  "Can only grant write access to users with role=user"
+POST {{adminBase}}/users/{{guestUid}}/grant-write
+Authorization: Bearer {{adminToken}}
+
+###
+
+### 10d. ❌ Grant write to unverified user
+# → 400  "User must verify their email first"
+POST {{adminBase}}/users/UNVERIFIED_USER_UID_HERE/grant-write
+Authorization: Bearer {{adminToken}}
+
+###
+
+
+### ═══════════════════════════════════════════════════════════════════
+###  SECTION 11  —  ADMIN: GRANULAR PERMISSION OVERRIDE
+###  Allowed:  read, write, delete
+###  Blocked:  deleteAny, manageUsers, manageSystem
+### ═══════════════════════════════════════════════════════════════════
+
+### 11a. ✅ Override multiple permissions at once
+# → 200  { success: true, updated: { write: true, delete: true } }
+PATCH {{adminBase}}/users/{{userUid}}/permissions
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "permissions": {
+    "write": true,
+    "delete": true
+  }
+}
+
+###
+
+### 11b. ✅ Revoke read access
+# → 200  { success: true, updated: { read: false } }
+PATCH {{adminBase}}/users/{{userUid}}/permissions
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "permissions": {
+    "read": false
+  }
+}
+
+###
+
+### 11c. ❌ Attempt to grant admin-only permissions
+# → 400  "Cannot grant [manageUsers, deleteAny, manageSystem] to non-admins"
+PATCH {{adminBase}}/users/{{userUid}}/permissions
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "permissions": {
+    "manageUsers": true,
+    "deleteAny": true,
+    "manageSystem": true
+  }
+}
+
+###
+
+### 11d. ❌ Empty permissions object
+# → 400  { code: "INVALID_PERMISSIONS" }
+PATCH {{adminBase}}/users/{{userUid}}/permissions
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "permissions": {}
+}
+
+###
+
+### 11e. ❌ Patching another admin's permissions
+# → 400  "Cannot modify admin permissions"
+PATCH {{adminBase}}/users/OTHER_ADMIN_UID_HERE/permissions
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "permissions": {
+    "write": false
+  }
+}
+
+###
+
+
+### ═══════════════════════════════════════════════════════════════════
+###  SECTION 12  —  ADMIN: ACCOUNT STATUS
+### ═══════════════════════════════════════════════════════════════════
+
+### 12a. ✅ Suspend a user
+# → 200  { success: true, message: "User ... suspended." }
+POST {{adminBase}}/users/{{userUid}}/suspend
+Authorization: Bearer {{adminToken}}
+
+###
+
+### 12b. ✅ Reactivate a suspended user
+# → 200  { success: true, message: "User ... reactivated." }
+POST {{adminBase}}/users/{{userUid}}/reactivate
+Authorization: Bearer {{adminToken}}
+
+###
+
+### 12c. ❌ Suspend your own admin account
+# → 400  { code: "SELF_ACTION" }
+POST {{adminBase}}/users/YOUR_OWN_ADMIN_UID_HERE/suspend
+Authorization: Bearer {{adminToken}}
+
+###
+
+### 12d. ❌ Suspend another admin
+# → 403  { code: "FORBIDDEN" }
+POST {{adminBase}}/users/OTHER_ADMIN_UID_HERE/suspend
+Authorization: Bearer {{adminToken}}
+
+###
+
+
+### ═══════════════════════════════════════════════════════════════════
+###  SECTION 13  —  HEALTH CHECK
+### ═══════════════════════════════════════════════════════════════════
+
+### 13. ✅ Health check — no auth needed
+# → 200  { ok: true, ts: "..." }
+GET {{host}}/api/health
+
+###

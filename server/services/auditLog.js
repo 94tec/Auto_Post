@@ -15,17 +15,32 @@ import { firestore } from '../config/firebase.js';
 const auditCol = () => collection(firestore, 'auditLogs');
 
 const EVENTS = Object.freeze({
+  // Auth lifecycle
   USER_REGISTERED:            'USER_REGISTERED',
+  REGISTRATION_ERROR:         'REGISTRATION_ERROR',
   USER_LOGIN:                 'USER_LOGIN',
+  LOGIN_SUCCESS:              'LOGIN_SUCCESS',
+  LOGIN_FAILURE:              'LOGIN_FAILURE',
+  USER_LOGOUT:                'USER_LOGOUT',
+
+  // Email verification
   EMAIL_VERIFICATION:         'EMAIL_VERIFICATION',
   EMAIL_VERIFICATION_RESEND:  'EMAIL_VERIFICATION_RESEND',
+
+  // Guest approval / promotion
   GUEST_APPROVED:             'GUEST_APPROVED',
   GUEST_PROMOTED:             'GUEST_PROMOTED',
+
+  // Permissions
   PERMISSION_GRANTED:         'PERMISSION_GRANTED',
   PERMISSION_REVOKED:         'PERMISSION_REVOKED',
   PERMISSION_OVERRIDE:        'PERMISSION_OVERRIDE',
+
+  // Account status
   USER_SUSPENDED:             'USER_SUSPENDED',
   USER_REACTIVATED:           'USER_REACTIVATED',
+
+  // Quotes
   QUOTE_CREATED:              'QUOTE_CREATED',
   QUOTE_UPDATED:              'QUOTE_UPDATED',
   QUOTE_DELETED:              'QUOTE_DELETED',

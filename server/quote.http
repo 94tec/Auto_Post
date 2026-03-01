@@ -1,23 +1,197 @@
-@token = {{"eyJhbGciOiJSUzI1NiIsImtpZCI6IjQ3YWU0OWM0YzlkM2ViODVhNTI1NDA3MmMzMGQyZThlNzY2MWVmZTEiLCJ0eXAiOiJKV1QifQ.eyJuYW1lIjoiVGVzdCBVc2VyIiwiaXNzIjoiaHR0cHM6Ly9zZWN1cmV0b2tlbi5nb29nbGUuY29tL3F1b3Rlc2FwcC0yNmY4NCIsImF1ZCI6InF1b3Rlc2FwcC0yNmY4NCIsImF1dGhfdGltZSI6MTc1MjExNDUwMywidXNlcl9pZCI6InFHdlh6ZTd5czNkZ3M1QVpjdWNaMHhtV2dUdDEiLCJzdWIiOiJxR3ZYemU3eXMzZGdzNUFaY3VjWjB4bVdnVHQxIiwiaWF0IjoxNzUyMTE0NTAzLCJleHAiOjE3NTIxMTgxMDMsImVtYWlsIjoibS5kYW11Y2hpLmtlQGdtYWlsLmNvbSIsImVtYWlsX3ZlcmlmaWVkIjp0cnVlLCJmaXJlYmFzZSI6eyJpZGVudGl0aWVzIjp7ImVtYWlsIjpbIm0uZGFtdWNoaS5rZUBnbWFpbC5jb20iXX0sInNpZ25faW5fcHJvdmlkZXIiOiJwYXNzd29yZCJ9fQ.VhOgvTb-m6N0hoNf0IjT45YnxA4EZQmjPqXZiCvUwub9P532YgfxzBz0TVY3L4kk4Rh40WQofXTJT7QVHrG1VJdmFGYmeThLtmKnFqZzz8iY4j9CqUBCdD3SMg3-uxMlHJA0qO8a0ZwEt045FLj9gK5-9FzNHp90Rommrw-OuWY6t-BuMeyc8xHnh4SBa2XQygHCCq9YwvlC4YAqrY-7ti31dUqQqLHfAEJialb6I-vjFDmLDnfvtnUNtRcejOuvj9oR7kB5dapTSXwUG4DQpDEiuRdat7KvVOnLBlNJyoQnyPvtJfA9aMI4iN4XVA_JDPZlGeMGS3TRA1lSq-4THQ"}}
+### ═══════════════════════════════════════════════════════════════════
+### quote.http  —  Damuchi / 94tec  |  Quotes API
+### Server: http://localhost:3000
+###
+### PERMISSION MATRIX (from refactored quoteRoutes.js)
+###   GET    /api/quotes         optionalAuth  — guests can read
+###   GET    /api/quotes/my      verifyToken   — own quotes only
+###   GET    /api/quotes/:id     optionalAuth
+###   POST   /api/quotes         verifyToken + activeAccount + write permission
+###   PATCH  /api/quotes/:id     verifyToken + activeAccount + write permission
+###   DELETE /api/quotes/:id     verifyToken + delete permission
+###
+### FIXES from your original quote.http:
+###   ✗ @token = {{"..."}}      →  ✅ @userToken = raw_token
+###   ✗ GET /api/quotes/{{-OUm9hn...}}  (broken variable syntax)
+###                             →  ✅ @quoteId = ... declared separately
+###   ✗ PUT /api/quotes/:id     →  ✅ PATCH /api/quotes/:id  (route changed)
+###   ✗ Expired token hardcoded →  ✅ kept in error test (5b) intentionally
+### ═══════════════════════════════════════════════════════════════════
+
+# ── Base URL ──────────────────────────────────────────────────────────
+@host       = http://localhost:3000
+@quotesBase = {{host}}/api/quotes
+
+# ── Tokens ────────────────────────────────────────────────────────────
+# Paste a fresh token after running POST /api/auth/login
+# Firebase tokens expire after 1 hour
+@userToken  = PASTE_USER_ID_TOKEN_HERE
+@adminToken = PASTE_ADMIN_ID_TOKEN_HERE
+
+# ── Quote IDs ─────────────────────────────────────────────────────────
+# Fill in after running Section 1 (GET all) or Section 3 (create)
+@quoteId      = PASTE_QUOTE_ID_HERE
+@ownQuoteId   = PASTE_YOUR_OWN_QUOTE_ID_HERE
+@otherQuoteId = PASTE_ANOTHER_USERS_QUOTE_ID_HERE
 
 
-### 1. Get All Quotes
-GET http://localhost:3000/api/quotes
-Authorization: Bearer {{token}}
-Content-Type: application/json
+### ═══════════════════════════════════════════════════════════════════
+###  SECTION 1  —  READ QUOTES  (open to all — no auth required)
+### ═══════════════════════════════════════════════════════════════════
+
+### 1a. ✅ Get all quotes — no token (guest read access)
+# → 200  { quotes: [...], total }
+GET {{quotesBase}}
 
 ###
 
-### 2. Get a Single Quote
-GET http://localhost:3000/api/quotes/{{-OUm9hn0CxuNs7F6jZ1G}}
-Authorization: Bearer {{token}}
-Content-Type: application/json
+### 1b. ✅ Get all quotes — with token (authenticated read)
+# → 200  { quotes: [...], total }
+GET {{quotesBase}}
+Authorization: Bearer {{userToken}}
 
 ###
 
-### 3. Create Quote (Requires Bearer Token)
-POST http://localhost:3000/api/quotes
-Authorization: Bearer {{token}}
+### 1c. ✅ Get quotes filtered by category
+# → 200  { quotes: [...] }  (only category=motivation)
+GET {{quotesBase}}?category=motivation
+
+###
+
+### 1d. ✅ Get all quotes with page size limit
+# → 200  { quotes: [...] }  (max 10 results)
+GET {{quotesBase}}?pageSize=10
+
+###
+
+### 1e. ✅ Get a single quote by ID
+# → 200  { quote: { id, text, author, category, ... } }
+GET {{quotesBase}}/{{quoteId}}
+Authorization: Bearer {{userToken}}
+
+###
+
+### 1f. ❌ Get quote with non-existent ID
+# → 404  { code: "NOT_FOUND" }
+GET {{quotesBase}}/nonexistent_id_xyz
+Authorization: Bearer {{userToken}}
+
+###
+
+### 1g. ✅ Get my own quotes only
+# → 200  { quotes: [...], total }  (only quotes created by the token holder)
+GET {{quotesBase}}/my
+Authorization: Bearer {{userToken}}
+
+###
+
+### 1h. ❌ Get my quotes — no token
+# → 401  { code: "NO_TOKEN" }
+GET {{quotesBase}}/my
+
+###
+
+
+### ═══════════════════════════════════════════════════════════════════
+###  SECTION 2  —  CREATE QUOTE
+###  Requires: verifyToken + requireActiveAccount + requirePermission('write')
+###  The admin must have called POST /api/admin/users/:uid/grant-write first
+### ═══════════════════════════════════════════════════════════════════
+
+### 2a. ✅ Create quote (user with write=true permission)
+# → 201  { message: "Quote created", quote: { id, text, author, category, ... } }
+POST {{quotesBase}}
+Authorization: Bearer {{userToken}}
+Content-Type: application/json
+
+{
+  "text": "Discipline equals freedom.",
+  "author": "Jocko Willink",
+  "category": "motivation"
+}
+
+###
+
+### 2b. ✅ Create quote — category defaults to "general" if omitted
+# → 201
+POST {{quotesBase}}
+Authorization: Bearer {{userToken}}
+Content-Type: application/json
+
+{
+  "text": "The only way to do great work is to love what you do.",
+  "author": "Steve Jobs"
+}
+
+###
+
+### 2c. ❌ Create quote — no token
+# → 401  { code: "NO_TOKEN" }
+POST {{quotesBase}}
+Content-Type: application/json
+
+{
+  "text": "No auth attempt.",
+  "author": "Nobody"
+}
+
+###
+
+### 2d. ❌ Create quote — user without write permission (write=false)
+# → 403  { code: "INSUFFICIENT_PERMISSION", required: "write" }
+POST {{quotesBase}}
+Authorization: Bearer {{userToken}}
+Content-Type: application/json
+
+{
+  "text": "Trying without permission.",
+  "author": "Blocked User"
+}
+
+###
+
+### 2e. ❌ Create quote — account not active (pending or awaiting)
+# → 403  { code: "ACCOUNT_PENDING" or "ACCOUNT_AWAITING" }
+POST {{quotesBase}}
+Authorization: Bearer {{userToken}}
+Content-Type: application/json
+
+{
+  "text": "Account not active yet.",
+  "author": "Pending User"
+}
+
+###
+
+### 2f. ❌ Create quote — missing required fields
+# → 400  { code: "MISSING_FIELDS" }
+POST {{quotesBase}}
+Authorization: Bearer {{userToken}}
+Content-Type: application/json
+
+{
+  "text": "Missing the author field."
+}
+
+###
+
+### 2g. ❌ Create quote — text too short (under 5 chars)
+# → 400  { code: "TEXT_TOO_SHORT" }
+POST {{quotesBase}}
+Authorization: Bearer {{userToken}}
+Content-Type: application/json
+
+{
+  "text": "Hi",
+  "author": "Someone"
+}
+
+###
+
+### 2h. ❌ Create quote — duplicate (exact same text already exists)
+# → 409  { code: "DUPLICATE_QUOTE" }
+POST {{quotesBase}}
+Authorization: Bearer {{userToken}}
 Content-Type: application/json
 
 {
@@ -27,19 +201,152 @@ Content-Type: application/json
 
 ###
 
-### 4. Update Quote (Requires Token)
-PUT http://localhost:3000/api/quotes/{{-OUm0OmiTnE6NsPqfoq5}}
-Authorization: Bearer {{token}}
+
+### ═══════════════════════════════════════════════════════════════════
+###  SECTION 3  —  UPDATE QUOTE
+###  Method is PATCH (not PUT — route changed in refactor)
+###  Requires: verifyToken + requireActiveAccount + requirePermission('write')
+###  Ownership: only the quote's creator OR admin can update it
+### ═══════════════════════════════════════════════════════════════════
+
+### 3a. ✅ Update your own quote
+# → 200  { message: "Quote updated", quote: { id, ... } }
+PATCH {{quotesBase}}/{{ownQuoteId}}
+Authorization: Bearer {{userToken}}
 Content-Type: application/json
 
 {
-  "text": "Updated quote content here.",
-  "author": "Updated Author"
+  "text": "Discipline equals freedom — updated.",
+  "author": "Jocko Willink"
 }
 
 ###
 
-### 5. Delete Quote
-DELETE http://localhost:3000/api/quotes/{{-OUm9hn0CxuNs7F6jZ1G}}
-Authorization: Bearer {{token}}
+### 3b. ✅ Partial update — text only
+# → 200
+PATCH {{quotesBase}}/{{ownQuoteId}}
+Authorization: Bearer {{userToken}}
 Content-Type: application/json
+
+{
+  "text": "Only the text is being changed here."
+}
+
+###
+
+### 3c. ✅ Admin updates any quote (regardless of ownership)
+# → 200
+PATCH {{quotesBase}}/{{otherQuoteId}}
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "text": "Admin corrected this quote.",
+  "author": "Corrected Author"
+}
+
+###
+
+### 3d. ❌ Update another user's quote as a non-admin
+# → 403  { code: "NOT_OWNER" }
+PATCH {{quotesBase}}/{{otherQuoteId}}
+Authorization: Bearer {{userToken}}
+Content-Type: application/json
+
+{
+  "text": "Trying to edit someone else's quote.",
+  "author": "Sneaky User"
+}
+
+###
+
+### 3e. ❌ Update with no token
+# → 401  { code: "NO_TOKEN" }
+PATCH {{quotesBase}}/{{ownQuoteId}}
+Content-Type: application/json
+
+{
+  "text": "No token update attempt."
+}
+
+###
+
+### 3f. ❌ Update non-existent quote
+# → 404  { code: "NOT_FOUND" }
+PATCH {{quotesBase}}/nonexistent_id_xyz
+Authorization: Bearer {{userToken}}
+Content-Type: application/json
+
+{
+  "text": "Quote does not exist.",
+  "author": "Ghost"
+}
+
+###
+
+
+### ═══════════════════════════════════════════════════════════════════
+###  SECTION 4  —  DELETE QUOTE
+###  Own quotes: verifyToken + requirePermission('delete')
+###  Any quote:  requires permissions.deleteAny (admin only)
+### ═══════════════════════════════════════════════════════════════════
+
+### 4a. ✅ Delete your own quote (user with delete=true)
+# → 200  { message: "Quote deleted", id }
+DELETE {{quotesBase}}/{{ownQuoteId}}
+Authorization: Bearer {{userToken}}
+
+###
+
+### 4b. ✅ Admin deletes any quote (uses deleteAny permission)
+# → 200  { message: "Quote deleted", id }
+DELETE {{quotesBase}}/{{otherQuoteId}}
+Authorization: Bearer {{adminToken}}
+
+###
+
+### 4c. ❌ Delete another user's quote as non-admin
+# → 403  { code: "NOT_OWNER" }
+DELETE {{quotesBase}}/{{otherQuoteId}}
+Authorization: Bearer {{userToken}}
+
+###
+
+### 4d. ❌ Delete with no token
+# → 401  { code: "NO_TOKEN" }
+DELETE {{quotesBase}}/{{ownQuoteId}}
+
+###
+
+### 4e. ❌ Delete non-existent quote
+# → 404  { code: "NOT_FOUND" }
+DELETE {{quotesBase}}/nonexistent_id_xyz
+Authorization: Bearer {{userToken}}
+
+###
+
+
+### ═══════════════════════════════════════════════════════════════════
+###  SECTION 5  —  EXPIRED TOKEN TESTS (from your original files)
+###  These use the original expired tokens to confirm 401 responses
+### ═══════════════════════════════════════════════════════════════════
+
+### 5a. ❌ GET all quotes with expired token from original quote.http
+# → 401  { code: "TOKEN_EXPIRED" }
+GET {{quotesBase}}
+Authorization: Bearer eyJhbGciOiJSUzI1NiIsImtpZCI6IjQ3YWU0OWM0YzlkM2ViODVhNTI1NDA3MmMzMGQyZThlNzY2MWVmZTEiLCJ0eXAiOiJKV1QifQ.eyJuYW1lIjoiVGVzdCBVc2VyIiwiaXNzIjoiaHR0cHM6Ly9zZWN1cmV0b2tlbi5nb29nbGUuY29tL3F1b3Rlc2FwcC0yNmY4NCIsImF1ZCI6InF1b3Rlc2FwcC0yNmY4NCIsImF1dGhfdGltZSI6MTc1MjExNDUwMywidXNlcl9pZCI6InFHdlh6ZTd5czNkZ3M1QVpjdWNaMHhtV2dUdDEiLCJzdWIiOiJxR3ZYemU3eXMzZGdzNUFaY3VjWjB4bVdnVHQxIiwiaWF0IjoxNzUyMTE0NTAzLCJleHAiOjE3NTIxMTgxMDMsImVtYWlsIjoibS5kYW11Y2hpLmtlQGdtYWlsLmNvbSIsImVtYWlsX3ZlcmlmaWVkIjp0cnVlLCJmaXJlYmFzZSI6eyJpZGVudGl0aWVzIjp7ImVtYWlsIjpbIm0uZGFtdWNoaS5rZUBnbWFpbC5jb20iXX0sInNpZ25faW5fcHJvdmlkZXIiOiJwYXNzd29yZCJ9fQ.VhOgvTb-m6N0hoNf0IjT45YnxA4EZQmjPqXZiCvUwub9P532YgfxzBz0TVY3L4kk4Rh40WQofXTJT7QVHrG1VJdmFGYmeThLtmKnFqZzz8iY4j9CqUBCdD3SMg3-uxMlHJA0qO8a0ZwEt045FLj9gK5-9FzNHp90Rommrw-OuWY6t-BuMeyc8xHnh4SBa2XQygHCCq9YwvlC4YAqrY-7ti31dUqQqLHfAEJialb6I-vjFDmLDnfvtnUNtRcejOuvj9oR7kB5dapTSXwUG4DQpDEiuRdat7KvVOnLBlNJyoQnyPvtJfA9aMI4iN4XVA_JDPZlGeMGS3TRA1lSq-4THQ
+
+###
+
+### 5b. ❌ POST quote with expired token
+# → 401  { code: "TOKEN_EXPIRED" }
+POST {{quotesBase}}
+Authorization: Bearer eyJhbGciOiJSUzI1NiIsImtpZCI6IjQ3YWU0OWM0YzlkM2ViODVhNTI1NDA3MmMzMGQyZThlNzY2MWVmZTEiLCJ0eXAiOiJKV1QifQ.eyJuYW1lIjoiVGVzdCBVc2VyIiwiaXNzIjoiaHR0cHM6Ly9zZWN1cmV0b2tlbi5nb29nbGUuY29tL3F1b3Rlc2FwcC0yNmY4NCIsImF1ZCI6InF1b3Rlc2FwcC0yNmY4NCIsImF1dGhfdGltZSI6MTc1MjExNDUwMywidXNlcl9pZCI6InFHdlh6ZTd5czNkZ3M1QVpjdWNaMHhtV2dUdDEiLCJzdWIiOiJxR3ZYemU3eXMzZGdzNUFaY3VjWjB4bVdnVHQxIiwiaWF0IjoxNzUyMTE0NTAzLCJleHAiOjE3NTIxMTgxMDMsImVtYWlsIjoibS5kYW11Y2hpLmtlQGdtYWlsLmNvbSIsImVtYWlsX3ZlcmlmaWVkIjp0cnVlLCJmaXJlYmFzZSI6eyJpZGVudGl0aWVzIjp7ImVtYWlsIjpbIm0uZGFtdWNoaS5rZUBnbWFpbC5jb20iXX0sInNpZ25faW5fcHJvdmlkZXIiOiJwYXNzd29yZCJ9fQ.VhOgvTb-m6N0hoNf0IjT45YnxA4EZQmjPqXZiCvUwub9P532YgfxzBz0TVY3L4kk4Rh40WQofXTJT7QVHrG1VJdmFGYmeThLtmKnFqZzz8iY4j9CqUBCdD3SMg3-uxMlHJA0qO8a0ZwEt045FLj9gK5-9FzNHp90Rommrw-OuWY6t-BuMeyc8xHnh4SBa2XQygHCCq9YwvlC4YAqrY-7ti31dUqQqLHfAEJialb6I-vjFDmLDnfvtnUNtRcejOuvj9oR7kB5dapTSXwUG4DQpDEiuRdat7KvVOnLBlNJyoQnyPvtJfA9aMI4iN4XVA_JDPZlGeMGS3TRA1lSq-4THQ
+Content-Type: application/json
+
+{
+  "text": "Expired token test.",
+  "author": "Expired User"
+}
+
+###

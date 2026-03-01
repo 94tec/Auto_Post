@@ -18,24 +18,25 @@
  * ═══════════════════════════════════════════════════════════════════
  */
 
-import { ref, get, set, update }         from 'firebase/database';
+import { ref, get, set, update } from 'firebase/database';
 import {
   doc, setDoc, getDoc, updateDoc,
   collection, query, where, getDocs,
   serverTimestamp, deleteDoc,
-}                                         from 'firebase/firestore';
-import { db, firestore, adminDb }         from '../config/firebase.js';
-import { ROLES, STATUS, DEFAULT_PERMISSIONS,
-         GRANTABLE_TO_USERS, ADMIN_ONLY_PERMS,
-         GUEST_UPGRADE_CRITERIA }         from '../config/roles.js';
+} from 'firebase/firestore';
+import { db, firestore } from '../config/firebase.js';
+import {
+  ROLES, STATUS, DEFAULT_PERMISSIONS,
+  GRANTABLE_TO_USERS, ADMIN_ONLY_PERMS,
+} from '../config/roles.js';
 
 // ── Ref helpers ──────────────────────────────────────────────────────
-const rtdbUser   = (uid) => ref(db, `users/${uid}`);
-const rtdbPerms  = (uid) => ref(db, `users/${uid}/permissions`);
-const rtdbBasic  = (uid) => ref(db, `users/${uid}/basic`);
-const fsUser     = (uid) => doc(firestore, 'users', uid);
-const fsQueue    = (uid) => doc(firestore, 'approvalQueue', uid);
-const fsQueueCol = ()    => collection(firestore, 'approvalQueue');
+const rtdbUser = (uid) => ref(db, `users/${uid}`);
+const rtdbPerms = (uid) => ref(db, `users/${uid}/permissions`);
+const rtdbBasic = (uid) => ref(db, `users/${uid}/basic`);
+const fsUser = (uid) => doc(firestore, 'users', uid);
+const fsQueue = (uid) => doc(firestore, 'approvalQueue', uid);
+const fsQueueCol = () => collection(firestore, 'approvalQueue');
 
 /* ══════════════════════════════════════════════════════════════════
    CREATE
@@ -49,27 +50,27 @@ const fsQueueCol = ()    => collection(firestore, 'approvalQueue');
  * @returns {Promise<Object>} created user data
  */
 export const createUser = async ({ uid, email, displayName, ip }) => {
-  const now  = new Date().toISOString();
+  const now = new Date().toISOString();
   const role = ROLES.GUEST;
 
   const basic = {
     uid,
     email,
-    displayName:    displayName || email.split('@')[0],
+    displayName: displayName || email.split('@')[0],
     role,
-    status:         STATUS.PENDING,
-    emailVerified:  false,
-    adminApproved:  false,
-    createdAt:      now,
-    updatedAt:      now,
+    status: STATUS.PENDING,
+    emailVerified: false,
+    adminApproved: false,
+    createdAt: now,
+    updatedAt: now,
   };
 
   const permissions = { ...DEFAULT_PERMISSIONS[role] };
 
   const meta = {
-    lastLogin:   null,
-    loginCount:  0,
-    ipHistory:   ip ? [ip] : [],
+    lastLogin: null,
+    loginCount: 0,
+    ipHistory: ip ? [ip] : [],
     registeredIp: ip || null,
   };
 
@@ -78,16 +79,17 @@ export const createUser = async ({ uid, email, displayName, ip }) => {
 
   // ── Write Firestore ─────────────────────────────────────────────
   await setDoc(fsUser(uid), {
-    uid, email,
-    displayName:    basic.displayName,
+    uid,
+    email,
+    displayName: basic.displayName,
     role,
-    status:         STATUS.PENDING,
-    emailVerified:  false,
-    adminApproved:  false,
+    status: STATUS.PENDING,
+    emailVerified: false,
+    adminApproved: false,
     permissions,
     meta,
-    createdAt:      serverTimestamp(),
-    updatedAt:      serverTimestamp(),
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
   });
 
   return { basic, permissions, meta };
@@ -150,6 +152,70 @@ export const getPermissions = async (uid) => {
 };
 
 /* ══════════════════════════════════════════════════════════════════
+   UPDATE (generic)
+   ══════════════════════════════════════════════════════════════════ */
+
+/**
+ * Update arbitrary user fields in both RTDB and Firestore.
+ * Maps known fields to appropriate nested paths.
+ *
+ * @param {string} uid
+ * @param {Object} updates - e.g. { name: 'New', email: '...', status: 'active', security: {...}, passwordHash: '...' }
+ */
+export const updateUser = async (uid, updates) => {
+  const snap = await get(rtdbUser(uid));
+  if (!snap.exists()) throw new Error(`User ${uid} not found`);
+
+  const now = new Date().toISOString();
+  const rtdbPatch = { 'basic/updatedAt': now };
+  const fsPatch = { updatedAt: serverTimestamp() };
+
+  // Helper to add a path to RTDB patch
+  const addRtdb = (path, value) => { rtdbPatch[path] = value; };
+  // Helper to add a field to Firestore patch (using dot notation for nested)
+  const addFs = (field, value) => { fsPatch[field] = value; };
+
+  // Map known fields
+  if (updates.name !== undefined) {
+    addRtdb('basic/displayName', updates.name);
+    addFs('displayName', updates.name);
+  }
+  if (updates.email !== undefined) {
+    addRtdb('basic/email', updates.email);
+    addFs('email', updates.email);
+  }
+  if (updates.status !== undefined) {
+    addRtdb('basic/status', updates.status);
+    addFs('status', updates.status);
+  }
+  if (updates.role !== undefined) {
+    addRtdb('basic/role', updates.role);
+    addFs('role', updates.role);
+  }
+  if (updates.passwordHash !== undefined) {
+    // Stored at root level in RTDB, and as a field in Firestore
+    addRtdb('passwordHash', updates.passwordHash);
+    addFs('passwordHash', updates.passwordHash);
+  }
+  if (updates.security !== undefined && typeof updates.security === 'object') {
+    // security is an object; update each nested field individually for both stores
+    Object.entries(updates.security).forEach(([key, val]) => {
+      addRtdb(`security/${key}`, val);
+      addFs(`security.${key}`, val);
+    });
+  }
+  // Add other top‑level fields if needed (e.g., profileCompleted)
+  if (updates.profileCompleted !== undefined) {
+    addRtdb('profileCompleted', updates.profileCompleted);
+    addFs('profileCompleted', updates.profileCompleted);
+  }
+
+  // Apply patches
+  await update(rtdbUser(uid), rtdbPatch);
+  await updateDoc(fsUser(uid), fsPatch);
+};
+
+/* ══════════════════════════════════════════════════════════════════
    EMAIL VERIFICATION  (step 1 of 2 for guest upgrade)
    ══════════════════════════════════════════════════════════════════ */
 
@@ -165,38 +231,38 @@ export const markEmailVerified = async (uid) => {
   const snap = await get(rtdbUser(uid));
   if (!snap.exists()) throw new Error(`User ${uid} not found`);
 
-  const user      = snap.val();
+  const user = snap.val();
   const alreadyApproved = user.basic?.adminApproved === true;
-  const now       = new Date().toISOString();
+  const now = new Date().toISOString();
 
   // Determine new status
   const newStatus = alreadyApproved ? STATUS.ACTIVE : STATUS.AWAITING;
 
   // ── RTDB update ─────────────────────────────────────────────────
   await update(rtdbUser(uid), {
-    'basic/emailVerified':   true,
+    'basic/emailVerified': true,
     'basic/emailVerifiedAt': now,
-    'basic/status':          newStatus,
-    'basic/updatedAt':       now,
+    'basic/status': newStatus,
+    'basic/updatedAt': now,
   });
 
   // ── Firestore update ─────────────────────────────────────────────
   await updateDoc(fsUser(uid), {
-    emailVerified:   true,
+    emailVerified: true,
     emailVerifiedAt: now,
-    status:          newStatus,
-    updatedAt:       serverTimestamp(),
+    status: newStatus,
+    updatedAt: serverTimestamp(),
   });
 
   // ── Add to approval queue (if not already approved) ──────────────
   if (!alreadyApproved) {
     await setDoc(fsQueue(uid), {
       uid,
-      email:        user.basic?.email,
-      displayName:  user.basic?.displayName,
+      email: user.basic?.email,
+      displayName: user.basic?.displayName,
       emailVerifiedAt: now,
-      requestedAt:  serverTimestamp(),
-      status:       'pending_approval',
+      requestedAt: serverTimestamp(),
+      status: 'pending_approval',
     });
   }
 
@@ -220,28 +286,28 @@ export const adminApproveUser = async (targetUid, adminUid) => {
   const snap = await get(rtdbUser(targetUid));
   if (!snap.exists()) throw new Error(`User ${targetUid} not found`);
 
-  const user          = snap.val();
-  const role          = user.basic?.role;
+  const user = snap.val();
+  const role = user.basic?.role;
   const emailVerified = user.basic?.emailVerified === true;
-  const now           = new Date().toISOString();
+  const now = new Date().toISOString();
 
   if (role === ROLES.ADMIN) {
     throw new Error('Cannot modify another admin via this route');
   }
 
   // If BOTH criteria met → promote to user
-  const promote   = emailVerified; // email verified is step 1
-  const newRole   = promote ? ROLES.USER   : role;
+  const promote = emailVerified; // email verified is step 1
+  const newRole = promote ? ROLES.USER : role;
   const newStatus = promote ? STATUS.ACTIVE : STATUS.AWAITING;
-  const newPerms  = promote ? { ...DEFAULT_PERMISSIONS[ROLES.USER] } : user.permissions;
+  const newPerms = promote ? { ...DEFAULT_PERMISSIONS[ROLES.USER] } : user.permissions;
 
   // ── RTDB update ─────────────────────────────────────────────────
   const rtdbPatch = {
-    'basic/adminApproved':   true,
+    'basic/adminApproved': true,
     'basic/adminApprovedBy': adminUid,
     'basic/adminApprovedAt': now,
-    'basic/status':          newStatus,
-    'basic/updatedAt':       now,
+    'basic/status': newStatus,
+    'basic/updatedAt': now,
   };
   if (promote) {
     rtdbPatch['basic/role'] = ROLES.USER;
@@ -253,14 +319,14 @@ export const adminApproveUser = async (targetUid, adminUid) => {
 
   // ── Firestore update ─────────────────────────────────────────────
   const fsPatch = {
-    adminApproved:   true,
+    adminApproved: true,
     adminApprovedBy: adminUid,
     adminApprovedAt: now,
-    status:          newStatus,
-    updatedAt:       serverTimestamp(),
+    status: newStatus,
+    updatedAt: serverTimestamp(),
   };
   if (promote) {
-    fsPatch.role        = ROLES.USER;
+    fsPatch.role = ROLES.USER;
     fsPatch.permissions = newPerms;
   }
   await updateDoc(fsUser(targetUid), fsPatch);
@@ -286,7 +352,7 @@ export const adminApproveUser = async (targetUid, adminUid) => {
  */
 export const overridePermissions = async (targetUid, permissions, adminUid) => {
   const user = await getUserById(targetUid);
-  if (!user)                           throw new Error('User not found');
+  if (!user) throw new Error('User not found');
   if (user.basic?.role === ROLES.ADMIN) throw new Error('Cannot modify admin permissions');
 
   // Block admin-only keys
@@ -319,8 +385,8 @@ export const overridePermissions = async (targetUid, permissions, adminUid) => {
   const auditRef = doc(firestore, `users/${targetUid}/permissionAudit`, `${Date.now()}`);
   await setDoc(auditRef, {
     changedBy: adminUid,
-    changes:   safe,
-    at:        serverTimestamp(),
+    changes: safe,
+    at: serverTimestamp(),
   });
 };
 
@@ -329,9 +395,9 @@ export const overridePermissions = async (targetUid, permissions, adminUid) => {
  */
 export const grantWriteAccess = async (targetUid, adminUid) => {
   const user = await getUserById(targetUid);
-  if (!user)                              throw new Error('User not found');
-  if (user.basic?.role !== ROLES.USER)    throw new Error('Can only grant write access to users with role=user');
-  if (!user.basic?.emailVerified)         throw new Error('User must verify their email first');
+  if (!user) throw new Error('User not found');
+  if (user.basic?.role !== ROLES.USER) throw new Error('Can only grant write access to users with role=user');
+  if (!user.basic?.emailVerified) throw new Error('User must verify their email first');
   if (user.basic?.status !== STATUS.ACTIVE) throw new Error('User account must be active');
   return overridePermissions(targetUid, { write: true }, adminUid);
 };
@@ -355,7 +421,7 @@ export const setAccountStatus = async (uid, status, changedBy) => {
     status,
     statusChangedBy: changedBy,
     statusChangedAt: now,
-    updatedAt:       serverTimestamp(),
+    updatedAt: serverTimestamp(),
   });
 };
 
@@ -377,15 +443,36 @@ export const recordLogin = async (uid, ip) => {
   const snap = await get(rtdbUser(uid));
   if (!snap.exists()) return;
 
-  const meta     = snap.val().meta || {};
-  const history  = Array.isArray(meta.ipHistory) ? meta.ipHistory : [];
+  const meta = snap.val().meta || {};
+  const history = Array.isArray(meta.ipHistory) ? meta.ipHistory : [];
   if (!history.includes(ip)) history.unshift(ip);
 
   const now = new Date().toISOString();
   await update(rtdbUser(uid), {
-    'meta/lastLogin':  now,
+    'meta/lastLogin': now,
     'meta/loginCount': (meta.loginCount || 0) + 1,
-    'meta/ipHistory':  history.slice(0, 10),
+    'meta/ipHistory': history.slice(0, 10),
     'basic/updatedAt': now,
   });
+};
+
+/* ══════════════════════════════════════════════════════════════════
+   DEFAULT EXPORT (bundle all functions)
+   ══════════════════════════════════════════════════════════════════ */
+
+export default {
+  createUser,
+  getUserById,
+  getUserFromFirestore,
+  getAllUsers,
+  getPermissions,
+  updateUser,
+  markEmailVerified,
+  adminApproveUser,
+  overridePermissions,
+  grantWriteAccess,
+  revokeWriteAccess,
+  setAccountStatus,
+  getApprovalQueue,
+  recordLogin,
 };

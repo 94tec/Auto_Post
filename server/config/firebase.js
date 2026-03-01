@@ -40,6 +40,9 @@ const clientApp = initClientApp({
 /** Firebase Admin SDK instance */
 export { admin };
 
+/** Admin Auth instance – for token verification, user management, etc. */
+export const firebaseAuth = admin.auth();
+
 /** Realtime Database (client SDK) — hot permission reads */
 export const db = getDatabase(clientApp);
 
