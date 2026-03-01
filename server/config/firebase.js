@@ -7,8 +7,8 @@ import { createRequire } from 'module';
 
 dotenv.config();
 const require = createRequire(import.meta.url);
-//const serviceAccount = require('../quotesapp-26f84-firebase-adminsdk-fbsvc-d247cc6b4d.json');
-const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY1);
+const serviceAccount = require('../quotesapp-26f84-firebase-adminsdk-fbsvc-d247cc6b4d.json');
+//const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY1);
 
 // Initialize Admin SDK
 admin.initializeApp({
