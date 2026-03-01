@@ -1,9 +1,12 @@
+// WelcomeVerifyEmail.jsx
 import { useEffect, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { auth } from "../config/firebase";
 import { sendEmailVerification, onAuthStateChanged } from "firebase/auth";
 import { motion } from "framer-motion";
 import { Mail, CheckCircle, AlertCircle, RotateCw } from "lucide-react";
+
+const ACCENT_GRADIENT = 'from-[#F59E0B] to-[#F97316]';
 
 const WelcomeVerifyEmail = () => {
   const [email, setEmail] = useState("");
@@ -15,7 +18,6 @@ const WelcomeVerifyEmail = () => {
   const navigate = useNavigate();
   const location = useLocation();
 
-  // Check verification status periodically
   useEffect(() => {
     setEmail(location.state?.email || auth.currentUser?.email || "");
 
@@ -25,7 +27,6 @@ const WelcomeVerifyEmail = () => {
         setIsVerified(user.emailVerified);
         setIsLoading(false);
         
-        // If verified, navigate to login after short delay
         if (user.emailVerified) {
           setTimeout(() => {
             navigate("/login", { 
@@ -35,12 +36,10 @@ const WelcomeVerifyEmail = () => {
           }, 2000);
         }
       } else {
-        // No user logged in, navigate to login
         navigate("/login", { replace: true });
       }
     });
 
-    // Check verification every 5 seconds
     const interval = setInterval(() => {
       auth.currentUser?.reload().then(() => {
         setIsVerified(auth.currentUser?.emailVerified || false);
@@ -74,32 +73,34 @@ const WelcomeVerifyEmail = () => {
 
   if (isLoading) {
     return (
-      <div className="w-full h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-purple-500"></div>
+      <div className="w-full h-screen flex items-center justify-center bg-[#0A0E1A]">
+        <div className="h-12 w-12 border-2 border-[#F59E0B] border-t-transparent rounded-full animate-spin"></div>
       </div>
     );
   }
 
   return (
-    <div className="w-full h-screen flex items-center justify-center p-4 bg-gradient-to-br from-[#0c0c1e] to-[#1a1a2e]">
+    <div className="w-full h-screen flex items-center justify-center p-4 bg-[#0A0E1A]">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="w-full max-w-md bg-white/5 backdrop-blur-md rounded-2xl p-8 text-white shadow-xl border border-white/10"
+        className="w-full max-w-md bg-[#1C2135] backdrop-blur-md rounded-2xl p-8 text-white shadow-xl border border-white/10"
       >
         <div className="text-center mb-8">
           {isVerified ? (
             <>
               <CheckCircle className="mx-auto h-16 w-16 text-green-500 mb-4" />
               <h2 className="text-3xl font-bold mb-2">Email Verified!</h2>
-              <p className="text-white/80">Redirecting you to login...</p>
+              <p className="text-gray-400">Redirecting you to login...</p>
             </>
           ) : (
             <>
-              <Mail className="mx-auto h-16 w-16 text-purple-400 mb-4" />
-              <h2 className="text-3xl font-bold mb-2">Verify Your Email</h2>
-              <p className="text-white/80">
-                We've sent a verification link to <span className="font-semibold">{email}</span>
+              <Mail className="mx-auto h-16 w-16 text-[#F59E0B] mb-4" />
+              <h2 className={`text-3xl font-bold mb-2 bg-clip-text text-transparent bg-gradient-to-r ${ACCENT_GRADIENT}`}>
+                Verify Your Email
+              </h2>
+              <p className="text-gray-400">
+                We've sent a verification link to <span className="font-semibold text-white">{email}</span>
               </p>
             </>
           )}
@@ -107,12 +108,12 @@ const WelcomeVerifyEmail = () => {
 
         {!isVerified && (
           <>
-            <div className="bg-yellow-900/20 border border-yellow-500/50 rounded-lg p-4 mb-6">
+            <div className="bg-amber-900/20 border border-amber-500/50 rounded-lg p-4 mb-6">
               <div className="flex items-start">
-                <AlertCircle className="flex-shrink-0 h-5 w-5 text-yellow-400 mt-0.5" />
+                <AlertCircle className="flex-shrink-0 h-5 w-5 text-amber-400 mt-0.5" />
                 <div className="ml-3">
-                  <h3 className="text-sm font-medium text-yellow-300">Check your inbox</h3>
-                  <div className="mt-2 text-sm text-yellow-200">
+                  <h3 className="text-sm font-medium text-amber-300">Check your inbox</h3>
+                  <div className="mt-2 text-sm text-amber-200">
                     <p>
                       Click the link in the email we sent to verify your account. 
                       If you don't see it, check your spam folder.
@@ -123,7 +124,7 @@ const WelcomeVerifyEmail = () => {
             </div>
 
             <div className="mt-6">
-              <p className="text-center text-sm text-white/70 mb-4">
+              <p className="text-center text-sm text-gray-400 mb-4">
                 Didn't receive the email?
               </p>
               
@@ -132,7 +133,7 @@ const WelcomeVerifyEmail = () => {
                 disabled={isSending}
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
-                className="w-full flex items-center justify-center bg-purple-600 hover:bg-purple-700 py-3 px-4 rounded-lg font-medium transition-colors"
+                className={`w-full flex items-center justify-center bg-gradient-to-r ${ACCENT_GRADIENT} py-3 px-4 rounded-lg font-medium text-gray-950 hover:opacity-90 transition-opacity`}
               >
                 {isSending ? (
                   <>

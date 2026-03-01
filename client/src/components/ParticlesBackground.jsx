@@ -1,3 +1,4 @@
+// ParticlesBackground.jsx
 import { useCallback } from 'react';
 import Particles from 'react-tsparticles';
 import { loadFull } from 'tsparticles';
@@ -42,13 +43,13 @@ const ParticlesBackground = () => {
         },
         particles: {
           color: {
-            value: "#ffffff",
+            value: "#F59E0B", // gold
           },
           links: {
-            color: "#ffffff",
+            color: "#F59E0B", // gold
             distance: 150,
             enable: true,
-            opacity: 0.3,
+            opacity: 0.2,
             width: 1,
           },
           collisions: {
@@ -72,7 +73,7 @@ const ParticlesBackground = () => {
             value: 40,
           },
           opacity: {
-            value: 0.3,
+            value: 0.2,
           },
           shape: {
             type: "circle",

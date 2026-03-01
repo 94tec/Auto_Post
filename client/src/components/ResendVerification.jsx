@@ -1,9 +1,10 @@
+// ResendVerification.jsx
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Mail, ArrowLeft, Check } from "lucide-react";
-import axios from "axios";
 
+const ACCENT_GRADIENT = 'from-[#F59E0B] to-[#F97316]';
 
 export default function ResendVerification() {
   const [email, setEmail] = useState("");
@@ -45,21 +46,21 @@ export default function ResendVerification() {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
-        className="w-full max-w-[500px] bg-[#0c0c1e]/90 backdrop-blur-sm rounded-2xl p-8 text-white shadow-2xl border border-white/10"
+        className="w-full max-w-[500px] bg-[#1C2135] backdrop-blur-sm rounded-2xl p-8 text-white shadow-2xl border border-white/10"
       >
         <button
           onClick={() => navigate(-1)}
-          className="flex items-center text-blue-400 hover:text-blue-300 mb-4 transition-colors"
+          className="flex items-center text-[#F59E0B] hover:text-[#F97316] mb-4 transition-colors"
         >
           <ArrowLeft size={18} className="mr-1" />
           Back
         </button>
 
         <div className="text-center mb-6">
-          <h2 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-indigo-500">
+          <h2 className={`text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r ${ACCENT_GRADIENT}`}>
             Resend Verification Email
           </h2>
-          <p className="text-white/70 mt-2 text-sm">
+          <p className="text-gray-400 mt-2 text-sm">
             Enter your email to receive a new verification link
           </p>
         </div>
@@ -69,12 +70,12 @@ export default function ResendVerification() {
             <input
               type="email"
               placeholder="Your Email"
-              className="w-full bg-black/20 rounded-lg p-3 pl-10 text-sm outline-none border border-white/10 focus:border-blue-500/50 transition-all duration-300 group-hover:border-white/30"
+              className="w-full bg-black/20 rounded-lg p-3 pl-10 text-sm outline-none border border-white/10 focus:border-[#F59E0B] focus:ring-2 focus:ring-[#F59E0B]/20 transition-all duration-300 group-hover:border-white/30 text-white placeholder-gray-500"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
             />
-            <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-blue-400/80 group-hover:text-blue-400 transition-colors" size={18} />
+            <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-[#F59E0B]/80 group-hover:text-[#F59E0B] transition-colors" size={18} />
           </div>
 
           {message && (
@@ -103,13 +104,13 @@ export default function ResendVerification() {
             disabled={isLoading}
             whileHover={{ scale: isLoading ? 1 : 1.02 }}
             whileTap={{ scale: isLoading ? 1 : 0.98 }}
-            className="relative w-full bg-gradient-to-r from-blue-600 to-indigo-600 py-3 rounded-lg font-medium hover:opacity-90 transition-opacity flex items-center justify-center"
+            className={`relative w-full bg-gradient-to-r ${ACCENT_GRADIENT} py-3 rounded-lg font-medium text-gray-950 hover:opacity-90 transition-opacity flex items-center justify-center`}
           >
             {isLoading ? (
               <>
                 <span className="opacity-0">Sending...</span>
                 <div className="absolute inset-0 flex items-center justify-center">
-                  <div className="h-5 w-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  <div className="h-5 w-5 border-2 border-gray-950 border-t-transparent rounded-full animate-spin"></div>
                 </div>
               </>
             ) : (
@@ -119,7 +120,7 @@ export default function ResendVerification() {
         </form>
 
         <div className="mt-6 border-t border-white/10 pt-4">
-          <p className="text-xs text-center text-white/50">
+          <p className="text-xs text-center text-gray-500">
             Didn't receive the email? Check your spam folder
           </p>
         </div>

@@ -1,7 +1,10 @@
-import { motion, AnimatePresence } from "framer-motion";
-import { FiEdit2, FiTrash2, FiCopy, FiShare2 } from "react-icons/fi";
-import { useState } from "react";
-import { toast } from "react-hot-toast";
+// QuoteCard.jsx
+import { motion, AnimatePresence } from 'framer-motion';
+import { FiEdit2, FiTrash2, FiCopy, FiShare2 } from 'react-icons/fi';
+import { useState } from 'react';
+import { toast } from 'react-hot-toast';
+
+const ACCENT_GRADIENT = 'from-[#F59E0B] to-[#F97316]';
 
 const QuoteCard = ({ quote, onEdit, onDelete }) => {
   const [isHovered, setIsHovered] = useState(false);
@@ -9,18 +12,18 @@ const QuoteCard = ({ quote, onEdit, onDelete }) => {
 
   const handleCopy = () => {
     navigator.clipboard.writeText(`"${quote.text}" — ${quote.author}`);
-    toast.success("Quote copied to clipboard!");
+    toast.success('Quote copied to clipboard!');
   };
 
   const handleShare = async () => {
     try {
       await navigator.share({
-        title: "Inspirational Quote",
+        title: 'Inspirational Quote',
         text: `"${quote.text}" — ${quote.author}`,
         url: window.location.href,
       });
     } catch (err) {
-      console.error("Sharing failed:", err);
+      console.error('Sharing failed:', err);
       handleCopy();
     }
   };
@@ -31,29 +34,27 @@ const QuoteCard = ({ quote, onEdit, onDelete }) => {
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.95 }}
-      transition={{ type: "spring", stiffness: 300, damping: 20 }}
-      className="bg-gradient-to-br from-gray-800 to-gray-900 p-5 rounded-xl relative shadow-lg border border-gray-700 hover:border-gray-600 transition-all"
+      transition={{ type: 'spring', stiffness: 300, damping: 20 }}
+      className="bg-[#1C2135] p-5 rounded-xl relative shadow-lg border border-white/10 hover:border-white/20 transition-all"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
       {/* Quote Content */}
       <div className="space-y-3">
-        <motion.p 
-          className="text-lg text-gray-100 leading-relaxed cursor-pointer"
+        <motion.p
+          className="text-lg text-white leading-relaxed cursor-pointer"
           onClick={() => setIsExpanded(!isExpanded)}
-          animate={{ 
+          animate={{
             WebkitLineClamp: isExpanded ? 'unset' : 3,
             display: '-webkit-box',
             WebkitBoxOrient: 'vertical',
-            overflow: 'hidden'
+            overflow: 'hidden',
           }}
         >
           “{quote.text}”
         </motion.p>
-        
-        <p className="text-sm text-gray-400 text-right italic">
-          — {quote.author}
-        </p>
+
+        <p className="text-sm text-gray-400 text-right italic">— {quote.author}</p>
       </div>
 
       {/* Action Buttons */}
@@ -64,13 +65,13 @@ const QuoteCard = ({ quote, onEdit, onDelete }) => {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 5 }}
             transition={{ duration: 0.2 }}
-            className="absolute top-3 right-3 flex space-x-2 bg-gray-900/80 backdrop-blur-sm rounded-lg p-1 shadow-lg border border-gray-700"
+            className="absolute top-3 right-3 flex space-x-2 bg-[#1C2135]/80 backdrop-blur-sm rounded-lg p-1 shadow-lg border border-white/10"
           >
             <motion.button
               whileHover={{ scale: 1.1 }}
               whileTap={{ scale: 0.9 }}
               onClick={() => onEdit(quote)}
-              className="p-1.5 text-gray-300 hover:text-yellow-400 transition-colors"
+              className="p-1.5 text-gray-400 hover:text-[#F59E0B] transition-colors"
               title="Edit quote"
             >
               <FiEdit2 size={16} />
@@ -80,7 +81,7 @@ const QuoteCard = ({ quote, onEdit, onDelete }) => {
               whileHover={{ scale: 1.1 }}
               whileTap={{ scale: 0.9 }}
               onClick={handleCopy}
-              className="p-1.5 text-gray-300 hover:text-blue-400 transition-colors"
+              className="p-1.5 text-gray-400 hover:text-[#F59E0B] transition-colors"
               title="Copy quote"
             >
               <FiCopy size={16} />
@@ -90,7 +91,7 @@ const QuoteCard = ({ quote, onEdit, onDelete }) => {
               whileHover={{ scale: 1.1 }}
               whileTap={{ scale: 0.9 }}
               onClick={handleShare}
-              className="p-1.5 text-gray-300 hover:text-green-400 transition-colors"
+              className="p-1.5 text-gray-400 hover:text-[#F59E0B] transition-colors"
               title="Share quote"
             >
               <FiShare2 size={16} />
@@ -100,7 +101,7 @@ const QuoteCard = ({ quote, onEdit, onDelete }) => {
               whileHover={{ scale: 1.1 }}
               whileTap={{ scale: 0.9 }}
               onClick={() => onDelete(quote.id)}
-              className="p-1.5 text-gray-300 hover:text-red-400 transition-colors"
+              className="p-1.5 text-gray-400 hover:text-red-400 transition-colors"
               title="Delete quote"
             >
               <FiTrash2 size={16} />

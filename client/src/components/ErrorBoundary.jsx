@@ -1,6 +1,9 @@
+// ErrorBoundary.jsx
 import React from "react";
 import { FiAlertTriangle, FiRefreshCw, FiHome, FiMail } from "react-icons/fi";
 import { motion } from "framer-motion";
+
+const ACCENT_GRADIENT = 'from-[#F59E0B] to-[#F97316]';
 
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -20,8 +23,6 @@ class ErrorBoundary extends React.Component {
   componentDidCatch(error, errorInfo) {
     console.error("💥 Error caught by ErrorBoundary:", error, errorInfo);
     this.setState({ errorInfo });
-    // Example: Log to error tracking service
-    // logErrorToService(error, errorInfo);
   }
 
   handleReload = () => {
@@ -52,9 +53,9 @@ class ErrorBoundary extends React.Component {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 0.5 }}
-          className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-red-900 to-red-700 p-6 text-white"
+          className="min-h-screen flex flex-col items-center justify-center bg-[#0A0E1A] p-6 text-white"
         >
-          <div className="max-w-2xl w-full bg-black/20 rounded-xl p-8 backdrop-blur-sm border border-red-400/30 shadow-xl">
+          <div className="max-w-2xl w-full bg-[#1C2135] rounded-xl p-8 backdrop-blur-sm border border-white/10 shadow-xl">
             <div className="flex flex-col items-center text-center mb-6">
               <motion.div
                 animate={{ 
@@ -68,16 +69,16 @@ class ErrorBoundary extends React.Component {
                 }}
                 className="mb-4"
               >
-                <FiAlertTriangle className="text-red-300" size={60} />
+                <FiAlertTriangle className="text-[#F59E0B]" size={60} />
               </motion.div>
               <h1 className="text-3xl font-bold mb-2">Oops! Something went wrong</h1>
-              <p className="text-red-100 mb-6">
+              <p className="text-gray-400 mb-6">
                 We've encountered an unexpected error. Please try refreshing the page.
               </p>
             </div>
 
             <div className="bg-black/30 rounded-lg p-4 mb-6">
-              <div className="font-mono text-sm text-red-100 mb-2">
+              <div className="font-mono text-sm text-gray-300 mb-2">
                 {this.state.error?.toString()}
               </div>
               
@@ -85,7 +86,7 @@ class ErrorBoundary extends React.Component {
                 <motion.pre
                   initial={{ height: 0, opacity: 0 }}
                   animate={{ height: "auto", opacity: 1 }}
-                  className="overflow-auto max-h-60 mt-2 p-2 bg-black/40 rounded text-xs"
+                  className="overflow-auto max-h-60 mt-2 p-2 bg-black/40 rounded text-xs text-gray-400"
                 >
                   {this.state.errorInfo.componentStack}
                 </motion.pre>
@@ -93,7 +94,7 @@ class ErrorBoundary extends React.Component {
 
               <button
                 onClick={this.toggleDetails}
-                className="text-xs mt-2 text-red-200 hover:text-white transition-colors"
+                className="text-xs mt-2 text-[#F59E0B] hover:text-[#F97316] transition-colors"
               >
                 {this.state.showDetails ? "Hide details" : "Show error details"}
               </button>
@@ -104,7 +105,7 @@ class ErrorBoundary extends React.Component {
                 whileHover={{ scale: 1.03 }}
                 whileTap={{ scale: 0.97 }}
                 onClick={this.handleReload}
-                className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-500 rounded-lg transition-colors"
+                className="flex items-center gap-2 px-4 py-2 bg-[#2a3045] hover:bg-[#353d55] rounded-lg transition-colors text-white"
               >
                 <FiRefreshCw />
                 Reload App
@@ -114,7 +115,7 @@ class ErrorBoundary extends React.Component {
                 whileHover={{ scale: 1.03 }}
                 whileTap={{ scale: 0.97 }}
                 onClick={this.handleGoHome}
-                className="flex items-center gap-2 px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors"
+                className="flex items-center gap-2 px-4 py-2 bg-[#2a3045] hover:bg-[#353d55] rounded-lg transition-colors text-white"
               >
                 <FiHome />
                 Go to Home
@@ -124,14 +125,14 @@ class ErrorBoundary extends React.Component {
                 whileHover={{ scale: 1.03 }}
                 whileTap={{ scale: 0.97 }}
                 onClick={this.handleReportError}
-                className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg transition-colors"
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r ${ACCENT_GRADIENT} text-gray-950 font-semibold hover:opacity-90 transition-opacity`}
               >
                 <FiMail />
                 Report Error
               </motion.button>
             </div>
 
-            <div className="mt-6 text-center text-xs text-red-200/70">
+            <div className="mt-6 text-center text-xs text-gray-500">
               <p>Error ID: {Math.random().toString(36).substring(2, 10)}</p>
               <p className="mt-1">v{import.meta.env.VITE_APP_VERSION || '1.0.0'}</p>
             </div>

@@ -1,13 +1,16 @@
+// QuoteForm.jsx
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FiSave, FiEdit2, FiX, FiPlus } from 'react-icons/fi';
 import toast from 'react-hot-toast';
 
+const ACCENT_GRADIENT = 'from-[#F59E0B] to-[#F97316]';
+
 const QuoteForm = ({ onSubmit, editingQuote, onCancel }) => {
   const [formData, setFormData] = useState({
     text: '',
     author: '',
-    category: 'motivation'
+    category: 'motivation',
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const textInputRef = useRef(null);
@@ -18,7 +21,7 @@ const QuoteForm = ({ onSubmit, editingQuote, onCancel }) => {
     { value: 'mindset', label: 'Mindset' },
     { value: 'discipline', label: 'Discipline' },
     { value: 'inspiration', label: 'Inspiration' },
-    { value: 'growth', label: 'Growth' }
+    { value: 'growth', label: 'Growth' },
   ];
 
   useEffect(() => {
@@ -26,17 +29,16 @@ const QuoteForm = ({ onSubmit, editingQuote, onCancel }) => {
       setFormData({
         text: editingQuote.text || '',
         author: editingQuote.author || '',
-        category: editingQuote.category || 'motivation'
+        category: editingQuote.category || 'motivation',
       });
     } else {
       setFormData({
         text: '',
         author: '',
-        category: 'motivation'
+        category: 'motivation',
       });
     }
-    
-    // Focus the text input when form mounts or editing changes
+
     setTimeout(() => {
       if (textInputRef.current) {
         textInputRef.current.focus();
@@ -64,14 +66,14 @@ const QuoteForm = ({ onSubmit, editingQuote, onCancel }) => {
       await onSubmit({
         text: formData.text.trim(),
         author: formData.author.trim(),
-        category: formData.category
+        category: formData.category,
       });
-      
+
       if (!editingQuote) {
         setFormData({
           text: '',
           author: '',
-          category: 'motivation'
+          category: 'motivation',
         });
       }
     } catch (error) {
@@ -83,9 +85,9 @@ const QuoteForm = ({ onSubmit, editingQuote, onCancel }) => {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
-      [name]: value
+      [name]: value,
     }));
   };
 
@@ -97,7 +99,10 @@ const QuoteForm = ({ onSubmit, editingQuote, onCancel }) => {
       transition={{ duration: 0.3 }}
       className="mb-6"
     >
-      <form onSubmit={handleSubmit} className="bg-gray-800 rounded-xl shadow-lg overflow-hidden border border-gray-700">
+      <form
+        onSubmit={handleSubmit}
+        className="bg-[#1C2135] rounded-xl shadow-lg overflow-hidden border border-white/10"
+      >
         <div className="p-5 space-y-4">
           <div>
             <label htmlFor="text" className="block text-sm font-medium text-gray-300 mb-1">
@@ -108,7 +113,7 @@ const QuoteForm = ({ onSubmit, editingQuote, onCancel }) => {
               id="text"
               name="text"
               placeholder="Enter an inspiring quote..."
-              className="w-full p-3 rounded-lg bg-gray-900 text-white border border-gray-700 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/50 transition"
+              className="w-full p-3 rounded-lg bg-black/20 text-white border border-white/10 focus:border-[#F59E0B] focus:ring-2 focus:ring-[#F59E0B]/20 transition placeholder-gray-500"
               rows={3}
               value={formData.text}
               onChange={handleChange}
@@ -126,7 +131,7 @@ const QuoteForm = ({ onSubmit, editingQuote, onCancel }) => {
                 type="text"
                 name="author"
                 placeholder="Who said it?"
-                className="w-full p-3 rounded-lg bg-gray-900 text-white border border-gray-700 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/50 transition"
+                className="w-full p-3 rounded-lg bg-black/20 text-white border border-white/10 focus:border-[#F59E0B] focus:ring-2 focus:ring-[#F59E0B]/20 transition placeholder-gray-500"
                 value={formData.author}
                 onChange={handleChange}
                 disabled={isSubmitting}
@@ -140,7 +145,7 @@ const QuoteForm = ({ onSubmit, editingQuote, onCancel }) => {
               <select
                 id="category"
                 name="category"
-                className="w-full p-3 rounded-lg bg-gray-900 text-white border border-gray-700 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/50 transition"
+                className="w-full p-3 rounded-lg bg-black/20 text-white border border-white/10 focus:border-[#F59E0B] focus:ring-2 focus:ring-[#F59E0B]/20 transition"
                 value={formData.category}
                 onChange={handleChange}
                 disabled={isSubmitting}
@@ -155,7 +160,7 @@ const QuoteForm = ({ onSubmit, editingQuote, onCancel }) => {
           </div>
         </div>
 
-        <div className="bg-gray-900/50 px-5 py-3 flex justify-between items-center border-t border-gray-700">
+        <div className="bg-black/20 px-5 py-3 flex justify-between items-center border-t border-white/10">
           <AnimatePresence>
             {editingQuote && (
               <motion.button
@@ -164,7 +169,7 @@ const QuoteForm = ({ onSubmit, editingQuote, onCancel }) => {
                 exit={{ opacity: 0, x: -20 }}
                 type="button"
                 onClick={onCancel}
-                className="flex items-center gap-2 px-4 py-2 text-gray-300 hover:text-white transition-colors"
+                className="flex items-center gap-2 px-4 py-2 text-gray-400 hover:text-white transition-colors"
                 disabled={isSubmitting}
               >
                 <FiX />
@@ -177,11 +182,11 @@ const QuoteForm = ({ onSubmit, editingQuote, onCancel }) => {
             type="submit"
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg ml-auto ${editingQuote ? 'bg-blue-600 hover:bg-blue-700' : 'bg-green-600 hover:bg-green-700'} text-white transition-colors`}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg ml-auto bg-gradient-to-r ${ACCENT_GRADIENT} text-gray-950 font-semibold hover:opacity-90 transition-opacity disabled:opacity-50`}
             disabled={isSubmitting}
           >
             {isSubmitting ? (
-              <span className="inline-block h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+              <span className="inline-block h-4 w-4 border-2 border-gray-950 border-t-transparent rounded-full animate-spin"></span>
             ) : (
               <>
                 {editingQuote ? <FiEdit2 /> : <FiPlus />}
