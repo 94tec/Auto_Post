@@ -1,5 +1,5 @@
 /**
- * services/userService.js
+ * controllers/auth/userController.js
  * ═══════════════════════════════════════════════════════════════════
  * Account-management operations for signed-in users.
  * "Things you do to your own account once you're already in."

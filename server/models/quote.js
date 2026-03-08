@@ -2,74 +2,149 @@
  * models/quote.js
  * ═══════════════════════════════════════════════════════════════════
  * All Firestore operations for the quotes collection.
- * Quotes are stored in Firestore for rich filtering/searching.
+ *
+ * WHAT CHANGED vs old version
+ * ───────────────────────────────────────────────────────────────────
+ *  Old code imported collection, doc, getDoc, getDocs, addDoc,
+ *  updateDoc, deleteDoc, query, where, orderBy, limit, startAfter,
+ *  serverTimestamp from 'firebase/firestore' (client SDK) and used
+ *  the exported `firestore` client instance.
+ *
+ *  On the server there is no signed-in Firebase user, so every client
+ *  SDK write → Code 7 PERMISSION_DENIED and every read → may fail
+ *  depending on your security rules.
+ *
+ *  New code uses adminFirestore (Admin SDK) exclusively.
+ *  admin.firestore.FieldValue.serverTimestamp() replaces the client
+ *  SDK's serverTimestamp() import.
+ *
+ *  Pagination note: startAfter() with a document snapshot is a client
+ *  SDK concept. With Admin SDK we use the document snapshot from
+ *  adminFirestore — the API is identical, just sourced correctly.
  * ═══════════════════════════════════════════════════════════════════
  */
 
-import {
-  collection, doc, getDoc, getDocs, addDoc,
-  updateDoc, deleteDoc, query, where,
-  orderBy, limit, startAfter, serverTimestamp,
-} from 'firebase/firestore';
-import { firestore } from '../config/firebase.js';
+import { admin, adminFirestore } from '../config/firebase.js';
 
-const quotesCol = () => collection(firestore, 'quotes');
-const quoteDoc  = (id) => doc(firestore, 'quotes', id);
+/* ── Helpers ─────────────────────────────────────────────────────── */
+const quotesCol = () => adminFirestore.collection('quotes');
+const quoteDoc  = (id) => adminFirestore.collection('quotes').doc(id);
+const serverTs  = () => admin.firestore.FieldValue.serverTimestamp();
 
-/* ── Create ─────────────────────────────────────────────────────── */
+/* ══════════════════════════════════════════════════════════════════
+   CREATE
+   ══════════════════════════════════════════════════════════════════ */
+
+/**
+ * @param {{ text, author, category, userId, createdBy }} params
+ * @returns {Promise<{ id, text, author, category, userId, createdBy }>}
+ */
 export const createQuote = async ({ text, author, category, userId, createdBy }) => {
-  const ref = await addDoc(quotesCol(), {
+  const data = {
     text:      text.trim(),
     author:    author.trim(),
     category:  category?.trim() || 'general',
     userId,
     createdBy,
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
-  });
-  return { id: ref.id, text, author, category, userId, createdBy };
+    createdAt: serverTs(),
+    updatedAt: serverTs(),
+  };
+
+  const ref = await quotesCol().add(data);
+  return { id: ref.id, ...data };
 };
 
-/* ── Read ───────────────────────────────────────────────────────── */
+/* ══════════════════════════════════════════════════════════════════
+   READ
+   ══════════════════════════════════════════════════════════════════ */
+
+/**
+ * Fetch a single quote by Firestore document ID.
+ * @param {string} id
+ * @returns {Promise<Object|null>}
+ */
 export const getQuoteById = async (id) => {
-  const snap = await getDoc(quoteDoc(id));
-  return snap.exists() ? { id: snap.id, ...snap.data() } : null;
+  const snap = await quoteDoc(id).get();
+  return snap.exists ? { id: snap.id, ...snap.data() } : null;
 };
 
-export const getQuotes = async ({ category, author, pageSize = 50, lastDoc } = {}) => {
-  const constraints = [orderBy('createdAt', 'desc'), limit(pageSize)];
-  if (category) constraints.push(where('category', '==', category));
-  if (lastDoc)  constraints.push(startAfter(lastDoc));
+/**
+ * Fetch a paginated list of quotes with optional filters.
+ * @param {{ category?, author?, pageSize?, lastDocId? }} options
+ *   lastDocId — Firestore document ID of the last item from the previous page
+ * @returns {Promise<Object[]>}
+ */
+export const getQuotes = async ({ category, author, pageSize = 50, lastDocId } = {}) => {
+  let q = quotesCol().orderBy('createdAt', 'desc').limit(pageSize);
 
-  const q    = query(quotesCol(), ...constraints);
-  const snap = await getDocs(q);
+  if (category) q = q.where('category', '==', category);
+  if (author)   q = q.where('author',   '==', author);
+
+  // Cursor-based pagination — fetch the last doc snapshot by ID
+  if (lastDocId) {
+    const lastSnap = await quoteDoc(lastDocId).get();
+    if (lastSnap.exists) q = q.startAfter(lastSnap);
+  }
+
+  const snap = await q.get();
   return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 };
 
+/**
+ * Fetch all quotes created by a specific user.
+ * @param {string} userId
+ * @returns {Promise<Object[]>}
+ */
 export const getQuotesByUser = async (userId) => {
-  const q    = query(quotesCol(), where('userId', '==', userId), orderBy('createdAt', 'desc'));
-  const snap = await getDocs(q);
+  const snap = await quotesCol()
+    .where('userId', '==', userId)
+    .orderBy('createdAt', 'desc')
+    .get();
   return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 };
 
+/**
+ * Check if a quote with identical text already exists.
+ * Used to prevent exact duplicates.
+ * @param {string} text
+ * @returns {Promise<boolean>}
+ */
 export const quoteDuplicateExists = async (text) => {
-  const q    = query(quotesCol(), where('text', '==', text.trim()));
-  const snap = await getDocs(q);
+  const snap = await quotesCol()
+    .where('text', '==', text.trim())
+    .limit(1)
+    .get();
   return !snap.empty;
 };
 
-/* ── Update ─────────────────────────────────────────────────────── */
+/* ══════════════════════════════════════════════════════════════════
+   UPDATE
+   ══════════════════════════════════════════════════════════════════ */
+
+/**
+ * Partially update a quote. Only text, author, category are patchable.
+ * @param {string} id
+ * @param {{ text?, author?, category? }} patch
+ * @returns {Promise<{ id, ...patch }>}
+ */
 export const updateQuote = async (id, patch) => {
-  const allowed = {};
+  const allowed = { updatedAt: serverTs() };
   if (patch.text)     allowed.text     = patch.text.trim();
   if (patch.author)   allowed.author   = patch.author.trim();
   if (patch.category) allowed.category = patch.category.trim();
-  allowed.updatedAt = serverTimestamp();
-  await updateDoc(quoteDoc(id), allowed);
+
+  await quoteDoc(id).update(allowed);
   return { id, ...allowed };
 };
 
-/* ── Delete ─────────────────────────────────────────────────────── */
+/* ══════════════════════════════════════════════════════════════════
+   DELETE
+   ══════════════════════════════════════════════════════════════════ */
+
+/**
+ * Hard-delete a quote document.
+ * @param {string} id
+ */
 export const deleteQuote = async (id) => {
-  await deleteDoc(quoteDoc(id));
+  await quoteDoc(id).delete();
 };
