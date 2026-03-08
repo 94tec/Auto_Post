@@ -1,76 +1,91 @@
 /**
  * services/auditLog.js
- * ═══════════════════════════════════════════════════════════════════
- * Immutable audit trail stored in Firestore.
- * Every sensitive action creates a record here.
- * ═══════════════════════════════════════════════════════════════════
+ * ════════════════════════════════════════════════════════
+ * Structured audit trail written to Firestore "auditLogs".
+ *
+ * Usage (matches adminController.js):
+ *   import AuditLog from '../services/auditLog.js';
+ *
+ *   await AuditLog.record(AuditLog.EVENTS.USER_LOGIN, {
+ *     userId, ip, userAgent, metadata: { ... }
+ *   });
+ *
+ *   const logs = await AuditLog.getRecent({ limit: 50, userId: 'xxx' });
+ * ════════════════════════════════════════════════════════
  */
 
-import {
-  collection, addDoc, query, orderBy,
-  limit, where, getDocs, serverTimestamp,
-} from 'firebase/firestore';
-import { firestore } from '../config/firebase.js';
+import { adminFirestore } from '../config/firebase.js';
 
-const auditCol = () => collection(firestore, 'auditLogs');
+const col = () => adminFirestore.collection('auditLogs');
 
-const EVENTS = Object.freeze({
-  // Auth lifecycle
-  USER_REGISTERED:            'USER_REGISTERED',
-  REGISTRATION_ERROR:         'REGISTRATION_ERROR',
-  USER_LOGIN:                 'USER_LOGIN',
-  LOGIN_SUCCESS:              'LOGIN_SUCCESS',
-  LOGIN_FAILURE:              'LOGIN_FAILURE',
-  USER_LOGOUT:                'USER_LOGOUT',
-
-  // Email verification
-  EMAIL_VERIFICATION:         'EMAIL_VERIFICATION',
-  EMAIL_VERIFICATION_RESEND:  'EMAIL_VERIFICATION_RESEND',
-
-  // Guest approval / promotion
-  GUEST_APPROVED:             'GUEST_APPROVED',
-  GUEST_PROMOTED:             'GUEST_PROMOTED',
-
-  // Permissions
-  PERMISSION_GRANTED:         'PERMISSION_GRANTED',
-  PERMISSION_REVOKED:         'PERMISSION_REVOKED',
-  PERMISSION_OVERRIDE:        'PERMISSION_OVERRIDE',
-
-  // Account status
-  USER_SUSPENDED:             'USER_SUSPENDED',
-  USER_REACTIVATED:           'USER_REACTIVATED',
-
-  // Quotes
-  QUOTE_CREATED:              'QUOTE_CREATED',
-  QUOTE_UPDATED:              'QUOTE_UPDATED',
-  QUOTE_DELETED:              'QUOTE_DELETED',
-});
-
-const AuditLog = {
-  EVENTS,
-
-  async record(event, { userId, ip, userAgent, metadata = {} } = {}) {
-    try {
-      await addDoc(auditCol(), {
-        event,
-        userId:    userId || null,
-        ip:        ip     || null,
-        userAgent: userAgent || null,
-        metadata,
-        createdAt: serverTimestamp(),
-      });
-    } catch (err) {
-      // Non-fatal — never let audit failure break the main flow
-      console.error('AuditLog.record failed:', err.message);
-    }
-  },
-
-  async getRecent({ limit: lim = 100, userId } = {}) {
-    const constraints = [orderBy('createdAt', 'desc'), limit(lim)];
-    if (userId) constraints.push(where('userId', '==', userId));
-    const snap = await getDocs(query(auditCol(), ...constraints));
-    return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-  },
+/* ── Event name constants ──────────────────────────────── */
+const EVENTS = {
+  USER_REGISTERED:              'USER_REGISTERED',
+  USER_LOGIN:                   'USER_LOGIN',
+  USER_LOGOUT:                  'USER_LOGOUT',
+  USER_SUSPENDED:               'USER_SUSPENDED',
+  USER_REACTIVATED:             'USER_REACTIVATED',
+  EMAIL_VERIFICATION:           'EMAIL_VERIFICATION',
+  EMAIL_VERIFICATION_RESEND:    'EMAIL_VERIFICATION_RESEND',
+  GUEST_APPROVED:               'GUEST_APPROVED',
+  GUEST_PROMOTED:               'GUEST_PROMOTED',
+  PERMISSION_GRANTED:           'PERMISSION_GRANTED',
+  PERMISSION_REVOKED:           'PERMISSION_REVOKED',
+  PERMISSION_OVERRIDE:          'PERMISSION_OVERRIDE',
+  PASSWORD_RESET_REQUESTED:     'PASSWORD_RESET_REQUESTED',
+  PASSWORD_RESET_COMPLETED:     'PASSWORD_RESET_COMPLETED',
+  PASSWORD_RESET_FAILED:        'PASSWORD_RESET_FAILED',
+  PASSWORD_RESET_ATTEMPT:       'PASSWORD_RESET_ATTEMPT',
+  PASSWORD_RESET_FAILURE:       'PASSWORD_RESET_FAILURE',
+  PASSWORD_RESET_VERIFICATION:  'PASSWORD_RESET_VERIFICATION',
+  PASSWORD_CHANGE:              'PASSWORD_CHANGE',
+  PROFILE_UPDATE:               'PROFILE_UPDATE',
+  ACCOUNT_DELETION:             'ACCOUNT_DELETION',
+  QUOTE_CREATED:                'QUOTE_CREATED',
+  QUOTE_DELETED:                'QUOTE_DELETED',
+  ADMIN_SEED_CREATE:            'ADMIN_SEED_CREATE',
+  ADMIN_SEED_UPGRADE:           'ADMIN_SEED_UPGRADE',
 };
 
+/**
+ * Write an audit event. Never throws — failures are logged to console only.
+ *
+ * @param {string} action  — one of EVENTS.*
+ * @param {{ userId, ip, userAgent, metadata }} opts
+ */
+const record = async (action, { userId, ip, userAgent, metadata } = {}) => {
+  try {
+    const ref = col().doc();
+    await ref.set({
+      id:        ref.id,
+      action:    action || 'UNKNOWN',
+      userId:    userId    || 'system',
+      ip:        ip        || 'unknown',
+      userAgent: userAgent || 'unknown',
+      metadata:  metadata  || {},
+      createdAt: new Date().toISOString(),
+    });
+  } catch (err) {
+    console.error('[AuditLog] write failed:', err.message);
+  }
+};
+
+/**
+ * Read recent audit logs for the admin dashboard.
+ * @param {{ limit?: number, userId?: string, action?: string }}
+ */
+const getRecent = async ({ limit = 100, userId, action } = {}) => {
+  let q = col().orderBy('createdAt', 'desc').limit(limit);
+  const snap = await q.get();
+
+  let logs = snap.docs.map((d) => d.data());
+  if (userId) logs = logs.filter((l) => l.userId === userId);
+  if (action) logs = logs.filter((l) => l.action === action);
+
+  return logs;
+};
+
+const AuditLog = { record, getRecent, EVENTS };
+
 export default AuditLog;
+export { record, getRecent, EVENTS };

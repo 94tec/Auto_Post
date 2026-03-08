@@ -5,6 +5,7 @@
 import { Router }              from 'express';
 import { getUserById
  } from '../models/user.js';  // RTDB update
+ import { changePassword, updateProfile, deleteAccount } from '../controllers/auth/userController.js'; // Auth + RTDB update  
 import { updateDoc }           from 'firebase/firestore';
 import { doc }                 from 'firebase/firestore';
 import { firestore }           from '../config/firebase.js';
@@ -64,5 +65,19 @@ router.patch('/profile', requireActiveAccount, async (req, res) => {
     return res.status(500).json({ error: 'Failed to update', code: 'SERVER_ERROR' });
   }
 });
+/* ══════════════════════════════════════════════════════════════
+   POST /api/users/change-password
+   ══════════════════════════════════════════════════════════════ */
+router.post('/change-password', requireActiveAccount, changePassword);
+
+/* ══════════════════════════════════════════════════════════════
+   PATCH /api/users/profile-advanced  (email + displayName)
+   ══════════════════════════════════════════════════════════════ */
+router.patch('/profile-advanced', requireActiveAccount, updateProfile);
+
+/* ══════════════════════════════════════════════════════════════
+   DELETE /api/users/account
+   ══════════════════════════════════════════════════════════════ */
+router.delete('/account', requireActiveAccount, deleteAccount);
 
 export default router;
