@@ -42,12 +42,13 @@
 ###  The "role" field in the body is ignored — cannot self-assign admin
 ### ═══════════════════════════════════════════════════════════════════
 
-POST /api/admin/users
+//POST /api/admin/users
+POST {{authBase}}/register
 Content-Type: application/json
 
 {
   "email": "m.damuchi.ke@gmail.com",
-  "password": "securePassword123",
+  "password": "securePassword123!",
   "displayName": "New Admin"
 }
 

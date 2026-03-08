@@ -1,98 +1,105 @@
 /**
  * services/auditLog.js
- * ════════════════════════════════════════════════════════
- * Structured audit trail written to Firestore "auditLogs".
+ * ═══════════════════════════════════════════════════════════════════
+ * Immutable audit trail stored in Firestore.
+ * Uses Admin SDK exclusively — bypasses Firestore security rules.
  *
- * Usage:
- *   import AuditLog from '../services/auditLog.js';
+ * DESIGN: record() always returns a Promise so callers can chain
+ * .catch() for fire-and-forget usage:
+ *   AuditLog.record(...).catch(() => {})
  *
- *   AuditLog.record(AuditLog.EVENTS.USER_LOGIN, { userId, ip, userAgent, metadata });
- *   // NOTE: do NOT await record() — it is intentionally fire-and-forget.
- *
- *   const logs = await AuditLog.getRecent({ limit: 50, userId: 'xxx' });
- *
- * WHY fire-and-forget:
- *   Firestore may be unavailable (not yet provisioned, quota hit, network
- *   blip). Audit logs must NEVER block or crash a user-facing request.
- *   record() returns void immediately; the write happens in the background.
- * ════════════════════════════════════════════════════════
+ * Errors inside record() are swallowed — a logging failure must
+ * never crash the main request flow.
+ * ═══════════════════════════════════════════════════════════════════
  */
 
-import { adminFirestore } from '../config/firebase.js';
+import { admin, adminFirestore } from '../config/firebase.js';
 
-const col = () => adminFirestore.collection('auditLogs');
+const auditCol = () => adminFirestore.collection('auditLogs');
+const serverTs = () => admin.firestore.FieldValue.serverTimestamp();
 
-/* ── Event name constants ──────────────────────────────── */
-const EVENTS = {
+const EVENTS = Object.freeze({
+  // Auth lifecycle
   USER_REGISTERED:              'USER_REGISTERED',
+  REGISTRATION_ERROR:           'REGISTRATION_ERROR',
   USER_LOGIN:                   'USER_LOGIN',
+  LOGIN_SUCCESS:                'LOGIN_SUCCESS',
+  LOGIN_FAILURE:                'LOGIN_FAILURE',
   USER_LOGOUT:                  'USER_LOGOUT',
-  USER_SUSPENDED:               'USER_SUSPENDED',
-  USER_REACTIVATED:             'USER_REACTIVATED',
+
+  // Email verification
   EMAIL_VERIFICATION:           'EMAIL_VERIFICATION',
   EMAIL_VERIFICATION_RESEND:    'EMAIL_VERIFICATION_RESEND',
+
+  // Guest approval / promotion
   GUEST_APPROVED:               'GUEST_APPROVED',
   GUEST_PROMOTED:               'GUEST_PROMOTED',
+
+  // Permissions
   PERMISSION_GRANTED:           'PERMISSION_GRANTED',
   PERMISSION_REVOKED:           'PERMISSION_REVOKED',
   PERMISSION_OVERRIDE:          'PERMISSION_OVERRIDE',
+
+  // Account status
+  USER_SUSPENDED:               'USER_SUSPENDED',
+  USER_REACTIVATED:             'USER_REACTIVATED',
+  ACCOUNT_DELETED:              'ACCOUNT_DELETED',
+
+  // Password
   PASSWORD_RESET_REQUESTED:     'PASSWORD_RESET_REQUESTED',
+  PASSWORD_RESET_LINK_VERIFIED: 'PASSWORD_RESET_LINK_VERIFIED',
   PASSWORD_RESET_COMPLETED:     'PASSWORD_RESET_COMPLETED',
   PASSWORD_RESET_FAILED:        'PASSWORD_RESET_FAILED',
-  PASSWORD_RESET_ATTEMPT:       'PASSWORD_RESET_ATTEMPT',
+  PASSWORD_RESET_ATTEMPT_UNKNOWN_EMAIL: 'PASSWORD_RESET_ATTEMPT_UNKNOWN_EMAIL',
   PASSWORD_RESET_FAILURE:       'PASSWORD_RESET_FAILURE',
-  PASSWORD_RESET_VERIFICATION:  'PASSWORD_RESET_VERIFICATION',
-  PASSWORD_CHANGE:              'PASSWORD_CHANGE',
-  PROFILE_UPDATE:               'PROFILE_UPDATE',
-  ACCOUNT_DELETION:             'ACCOUNT_DELETION',
+  PASSWORD_CHANGED:             'PASSWORD_CHANGED',
+
+  // Profile
+  PROFILE_UPDATED:              'PROFILE_UPDATED',
+
+  // Quotes
   QUOTE_CREATED:                'QUOTE_CREATED',
+  QUOTE_UPDATED:                'QUOTE_UPDATED',
   QUOTE_DELETED:                'QUOTE_DELETED',
-  ADMIN_SEED_CREATE:            'ADMIN_SEED_CREATE',
-  ADMIN_SEED_UPGRADE:           'ADMIN_SEED_UPGRADE',
-};
+});
 
-/* ── record — FIRE AND FORGET, never await ─────────────── */
-/**
- * @param {string} action  — one of EVENTS.*
- * @param {{ userId?, ip?, userAgent?, metadata? }} opts
- * @returns {void}  — intentionally NOT a Promise
- */
-const record = (action, { userId, ip, userAgent, metadata } = {}) => {
-  Promise.resolve()
-    .then(async () => {
-      const ref = col().doc();
-      await ref.set({
-        id:        ref.id,
-        action:    action    || 'UNKNOWN',
-        userId:    userId    || 'system',
-        ip:        ip        || 'unknown',
-        userAgent: userAgent || 'unknown',
-        metadata:  metadata  || {},
-        createdAt: new Date().toISOString(),
-      });
-    })
-    .catch((err) => {
-      // Warn only — never crash. Enable Firestore in your Firebase console
-      // (Firestore → Create database) to persist audit logs.
-      console.warn('[AuditLog] write skipped:', err.code || err.message);
+const AuditLog = {
+  EVENTS,
+
+  /**
+   * Write an audit event to Firestore.
+   * Always returns a Promise — safe to chain .catch() for fire-and-forget.
+   * Errors are logged to console but never propagated.
+   *
+   * @param {string} event          — use AuditLog.EVENTS.*
+   * @param {{ userId?, ip?, userAgent?, metadata? }} context
+   * @returns {Promise<void>}
+   */
+  record(event, { userId, ip, userAgent, metadata = {} } = {}) {
+    return auditCol().add({
+      event,
+      userId:    userId    ?? null,
+      ip:        ip        ?? null,
+      userAgent: userAgent ?? null,
+      metadata,
+      createdAt: serverTs(),
+    }).catch((err) => {
+      // Non-fatal — log locally but never throw
+      console.warn(`[AuditLog] write failed (${event}):`, err.message);
     });
-};
+  },
 
-/* ── getRecent — awaitable, used by admin dashboard ───── */
-/**
- * @param {{ limit?: number, userId?: string, action?: string }}
- * @returns {Promise<Object[]>}
- */
-const getRecent = async ({ limit = 100, userId, action } = {}) => {
-  const snap = await col().orderBy('createdAt', 'desc').limit(limit).get();
-  let logs = snap.docs.map((d) => d.data());
-  if (userId) logs = logs.filter((l) => l.userId === userId);
-  if (action)  logs = logs.filter((l) => l.action === action);
-  return logs;
+  /**
+   * Fetch recent audit entries.
+   * @param {{ limit?: number, userId?: string }} opts
+   * @returns {Promise<Object[]>}
+   */
+  async getRecent({ limit: lim = 100, userId } = {}) {
+    let q = auditCol().orderBy('createdAt', 'desc').limit(lim);
+    if (userId) q = q.where('userId', '==', userId);
+    const snap = await q.get();
+    return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  },
 };
-
-/* ── Export ────────────────────────────────────────────── */
-const AuditLog = { record, getRecent, EVENTS };
 
 export default AuditLog;
-export { record, getRecent, EVENTS };
