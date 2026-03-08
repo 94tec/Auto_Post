@@ -18,7 +18,7 @@ const require = createRequire(import.meta.url);
 
 // ── Admin SDK (server-side) ──────────────────────────────────────────
 if (!admin.apps.length) {
-  const serviceAccount = require('../quotesapp-26f84-firebase-adminsdk-fbsvc-d247cc6b4d.json');
+  const serviceAccount = process.env.FIREBASE_SERVICE_ACCOUNT_PATH;
 
   admin.initializeApp({
     credential:   admin.credential.cert(serviceAccount),

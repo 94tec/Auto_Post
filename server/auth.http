@@ -42,6 +42,15 @@
 ###  The "role" field in the body is ignored — cannot self-assign admin
 ### ═══════════════════════════════════════════════════════════════════
 
+POST /api/admin/users
+Content-Type: application/json
+
+{
+  "email": "m.damuchi.ke@gmail.com",
+  "password": "securePassword123",
+  "displayName": "New Admin"
+}
+
 ### 1a. ✅ Register valid new user
 # → 201  { userId, role: "guest", status: "pending" }
 POST {{authBase}}/register

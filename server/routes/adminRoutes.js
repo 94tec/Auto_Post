@@ -22,7 +22,7 @@
  */
 import { Router }       from 'express';
 import {
-  getQueue, approveUser,
+  createAdmin, getQueue, approveUser,
   listUsers, getUserDetail,
   grantWrite, revokeWrite, patchPermissions,
   suspendUser, reactivateUser,
@@ -36,6 +36,9 @@ const router = Router();
 
 // ── Apply guards to entire router ────────────────────────────────
 router.use(verifyToken, requireAdmin, adminRateLimiter);
+
+// Create an admin user (only for admins)
+router.post('/users', createAdmin);
 
 // ── Dashboard ─────────────────────────────────────────────────────
 router.get('/stats',          getStats);

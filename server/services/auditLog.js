@@ -3,14 +3,18 @@
  * ════════════════════════════════════════════════════════
  * Structured audit trail written to Firestore "auditLogs".
  *
- * Usage (matches adminController.js):
+ * Usage:
  *   import AuditLog from '../services/auditLog.js';
  *
- *   await AuditLog.record(AuditLog.EVENTS.USER_LOGIN, {
- *     userId, ip, userAgent, metadata: { ... }
- *   });
+ *   AuditLog.record(AuditLog.EVENTS.USER_LOGIN, { userId, ip, userAgent, metadata });
+ *   // NOTE: do NOT await record() — it is intentionally fire-and-forget.
  *
  *   const logs = await AuditLog.getRecent({ limit: 50, userId: 'xxx' });
+ *
+ * WHY fire-and-forget:
+ *   Firestore may be unavailable (not yet provisioned, quota hit, network
+ *   blip). Audit logs must NEVER block or crash a user-facing request.
+ *   record() returns void immediately; the write happens in the background.
  * ════════════════════════════════════════════════════════
  */
 
@@ -47,44 +51,47 @@ const EVENTS = {
   ADMIN_SEED_UPGRADE:           'ADMIN_SEED_UPGRADE',
 };
 
+/* ── record — FIRE AND FORGET, never await ─────────────── */
 /**
- * Write an audit event. Never throws — failures are logged to console only.
- *
  * @param {string} action  — one of EVENTS.*
- * @param {{ userId, ip, userAgent, metadata }} opts
+ * @param {{ userId?, ip?, userAgent?, metadata? }} opts
+ * @returns {void}  — intentionally NOT a Promise
  */
-const record = async (action, { userId, ip, userAgent, metadata } = {}) => {
-  try {
-    const ref = col().doc();
-    await ref.set({
-      id:        ref.id,
-      action:    action || 'UNKNOWN',
-      userId:    userId    || 'system',
-      ip:        ip        || 'unknown',
-      userAgent: userAgent || 'unknown',
-      metadata:  metadata  || {},
-      createdAt: new Date().toISOString(),
+const record = (action, { userId, ip, userAgent, metadata } = {}) => {
+  Promise.resolve()
+    .then(async () => {
+      const ref = col().doc();
+      await ref.set({
+        id:        ref.id,
+        action:    action    || 'UNKNOWN',
+        userId:    userId    || 'system',
+        ip:        ip        || 'unknown',
+        userAgent: userAgent || 'unknown',
+        metadata:  metadata  || {},
+        createdAt: new Date().toISOString(),
+      });
+    })
+    .catch((err) => {
+      // Warn only — never crash. Enable Firestore in your Firebase console
+      // (Firestore → Create database) to persist audit logs.
+      console.warn('[AuditLog] write skipped:', err.code || err.message);
     });
-  } catch (err) {
-    console.error('[AuditLog] write failed:', err.message);
-  }
 };
 
+/* ── getRecent — awaitable, used by admin dashboard ───── */
 /**
- * Read recent audit logs for the admin dashboard.
  * @param {{ limit?: number, userId?: string, action?: string }}
+ * @returns {Promise<Object[]>}
  */
 const getRecent = async ({ limit = 100, userId, action } = {}) => {
-  let q = col().orderBy('createdAt', 'desc').limit(limit);
-  const snap = await q.get();
-
+  const snap = await col().orderBy('createdAt', 'desc').limit(limit).get();
   let logs = snap.docs.map((d) => d.data());
   if (userId) logs = logs.filter((l) => l.userId === userId);
-  if (action) logs = logs.filter((l) => l.action === action);
-
+  if (action)  logs = logs.filter((l) => l.action === action);
   return logs;
 };
 
+/* ── Export ────────────────────────────────────────────── */
 const AuditLog = { record, getRecent, EVENTS };
 
 export default AuditLog;

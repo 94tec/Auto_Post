@@ -1,67 +1,82 @@
 /**
  * config/roles.js
- * ═══════════════════════════════════════════════════════════════════
- * SINGLE SOURCE OF TRUTH — roles, permissions, upgrade criteria.
+ * ════════════════════════════════════════════════════════
+ * Single source of truth for roles, statuses, permissions.
  *
- * ROLE HIERARCHY
- * ───────────────────────────────────────────────────────────────────
- *  guest   read-only. Upgrade: emailVerified AND adminApproved → user
- *  user    authenticated + approved. write only when admin grants it.
- *  admin   seeded via CLI only. Full access. Cannot be self-assigned.
+ * ROLES
+ *   admin  – full control. Created ONLY via scripts/seedAdmin.js
+ *   user   – verified + admin-approved. Read + write (if granted)
+ *   guest  – newly registered, read-only
  *
- * GUEST UPGRADE — BOTH required:
- *   1. emailVerified  = true   (automatic when oobCode consumed)
- *   2. adminApproved  = true   (admin calls POST /admin/users/:uid/approve)
+ * STATUS  (RTDB: users/{uid}/basic/status)
+ *   pending   – registered, email NOT yet verified
+ *   awaiting  – email verified, waiting for admin approval (step 2)
+ *   active    – fully approved and active
+ *   suspended – disabled by admin
  *
- * STORAGE SPLIT (Realtime DB + Firestore)
- * ───────────────────────────────────────────────────────────────────
- *  RTDB       hot path — auth checks, live permission reads
- *             users/{uid}/basic, users/{uid}/permissions
+ * UPGRADE PATH
+ *   guest/pending  → awaiting    (email verified — authController)
+ *   guest/awaiting → user/active (admin approves — adminController)
+ *   user           → user+write  (admin grants write — adminController)
+ *   USERS CANNOT BECOME ADMIN    (only scripts/seedAdmin.js)
  *
- *  Firestore  rich queries, audit trail, approval queue
- *             users/{uid}  (full profile doc)
- *             auditLogs/{id}
- *             approvalQueue/{uid}
- * ═══════════════════════════════════════════════════════════════════
+ * PERMISSIONS  (RTDB: users/{uid}/permissions/)
+ *   Stored as flat booleans. Admin can override per-user via
+ *   PATCH /api/admin/users/:uid/permissions (GRANTABLE_TO_USERS keys only).
+ * ════════════════════════════════════════════════════════
  */
 
-export const ROLES = Object.freeze({
+export const ROLES = {
   ADMIN: 'admin',
   USER:  'user',
   GUEST: 'guest',
-});
+};
 
-export const STATUS = Object.freeze({
-  PENDING:   'pending',    // registered, email not yet verified
-  AWAITING:  'awaiting',   // email verified, waiting admin approval
-  ACTIVE:    'active',     // fully onboarded
-  SUSPENDED: 'suspended',  // banned
-});
+export const STATUS = {
+  PENDING:   'pending',
+  AWAITING:  'awaiting',
+  ACTIVE:    'active',
+  SUSPENDED: 'suspended',
+};
 
-export const DEFAULT_PERMISSIONS = Object.freeze({
-  [ROLES.ADMIN]: {
-    read: true, write: true, delete: true,
-    deleteAny: true, manageUsers: true, manageSystem: true,
+/** Default permission sets — written to RTDB on account creation / role change */
+export const DEFAULT_PERMISSIONS = {
+  admin: {
+    read:        true,
+    write:       true,
+    delete:      true,
+    manageUsers: true,
+    accessAdmin: true,
   },
-  [ROLES.USER]: {
-    read: true, write: false,  // admin flips write=true explicitly
-    delete: true,              // own quotes only — enforced in controller
-    deleteAny: false, manageUsers: false, manageSystem: false,
+  user: {
+    read:        true,
+    write:       false,   // ← must be explicitly granted by admin
+    delete:      false,
+    manageUsers: false,
+    accessAdmin: false,
   },
-  [ROLES.GUEST]: {
-    read: true, write: false, delete: false,
-    deleteAny: false, manageUsers: false, manageSystem: false,
+  guest: {
+    read:        true,
+    write:       false,
+    delete:      false,
+    manageUsers: false,
+    accessAdmin: false,
   },
+};
+
+/**
+ * Permission keys an admin may grant/revoke on individual users.
+ * 'manageUsers' and 'accessAdmin' are NEVER grantable to non-admins.
+ */
+export const GRANTABLE_TO_USERS = ['read', 'write', 'delete'];
+
+/** Returns a fresh copy of the default permissions for a role */
+export const buildDefaultPermissions = (role) => ({
+  ...(DEFAULT_PERMISSIONS[role] ?? DEFAULT_PERMISSIONS.guest),
 });
 
-/** Both must be true for guest → user promotion */
-export const GUEST_UPGRADE_CRITERIA = Object.freeze({
-  requireEmailVerified: true,
-  requireAdminApproval: true,
-});
-
-/** Keys an admin may grant/revoke on non-admin users */
-export const GRANTABLE_TO_USERS = Object.freeze(['read', 'write', 'delete']);
-
-/** Keys that are permanently admin-only */
-export const ADMIN_ONLY_PERMS = Object.freeze(['deleteAny', 'manageUsers', 'manageSystem']);
+/**
+ * Permission keys that may NEVER be granted to non-admin users.
+ * overridePermissions() blocks these regardless of who calls it.
+ */
+export const ADMIN_ONLY_PERMS = ['manageUsers', 'manageSystem', 'accessAdmin'];

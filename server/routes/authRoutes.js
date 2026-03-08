@@ -15,7 +15,7 @@ import {
   forgotPassword,
   verifyResetLink,
   resetPassword,
-}                          from '../controllers/authController.js';
+}                          from '../controllers/auth/authController.js';
 import { verifyToken }     from '../middlewares/auth.js';
 import { authRateLimiter } from '../middlewares/rateLimiter.js';
 

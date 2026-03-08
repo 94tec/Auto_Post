@@ -35,6 +35,112 @@ import { ROLES, STATUS,
 import AuditLog                 from '../../services/auditLog.js';
 
 const myUid = (req) => req.uid;
+/**
+ * POST /api/admin/users
+ * Body: { email, password, displayName }
+ * Creates a new admin user (emailVerified, role=admin, all permissions)
+ */
+export const createAdmin = async (req, res) => {
+  const { email, password, displayName } = req.body;
+  const creatorUid = req.uid;  // from verifyToken middleware
+
+  // Basic validation
+  if (!email || !password || !displayName) {
+    return res.status(400).json({ error: 'Missing required fields: email, password, displayName' });
+  }
+  if (password.length < 8) {
+    return res.status(400).json({ error: 'Password must be at least 8 characters' });
+  }
+
+  try {
+    // 1. Check if user already exists in Auth
+    let firebaseUser;
+    try {
+      firebaseUser = await admin.auth().getUserByEmail(email);
+      // If user exists, decide policy: either forbid or upgrade.
+      // Here we forbid to avoid accidental role changes.
+      return res.status(409).json({ error: 'User with this email already exists' });
+    } catch (err) {
+      if (err.code === 'auth/user-not-found') {
+        // Proceed to create
+        firebaseUser = await admin.auth().createUser({
+          email,
+          password,
+          displayName,
+          emailVerified: true,   // admin accounts skip verification
+          disabled: false,
+        });
+      } else {
+        throw err; // unexpected error
+      }
+    }
+
+    const uid = firebaseUser.uid;
+    const now = new Date().toISOString();
+
+    // 2. Write to Realtime Database (nested structure as in seedAdmin)
+    const rtdbPayload = {
+      [`users/${uid}/basic/uid`]:            uid,
+      [`users/${uid}/basic/email`]:          email.toLowerCase(),
+      [`users/${uid}/basic/displayName`]:    displayName,
+      [`users/${uid}/basic/role`]:           'admin',
+      [`users/${uid}/basic/status`]:         'active',
+      [`users/${uid}/basic/emailVerified`]:  true,
+      [`users/${uid}/basic/adminApproved`]:  true,
+      [`users/${uid}/basic/createdAt`]:      now,
+      [`users/${uid}/basic/updatedAt`]:      now,
+      // Permissions (all true for admin)
+      [`users/${uid}/permissions/read`]:        true,
+      [`users/${uid}/permissions/write`]:       true,
+      [`users/${uid}/permissions/delete`]:      true,
+      [`users/${uid}/permissions/manageUsers`]: true,
+      [`users/${uid}/permissions/accessAdmin`]: true,
+      // Meta
+      [`users/${uid}/meta/lastLogin`]:   null,
+      [`users/${uid}/meta/seededAt`]:    now,
+      [`users/${uid}/meta/createdBy`]:   creatorUid,
+    };
+    await admin.database().ref('/').update(rtdbPayload);
+
+    // 3. Write to Firestore (mirror)
+    await admin.firestore().collection('users').doc(uid).set({
+      uid,
+      email: email.toLowerCase(),
+      displayName,
+      role: 'admin',
+      status: 'active',
+      emailVerified: true,
+      adminApproved: true,
+      permissions: {
+        read: true,
+        write: true,
+        delete: true,
+        manageUsers: true,
+        accessAdmin: true,
+      },
+      createdAt: now,
+      updatedAt: now,
+      createdBy: creatorUid,
+    }, { merge: true });
+
+    // 4. Audit log
+    await AuditLog.record('ADMIN_CREATED', {
+      userId: creatorUid,
+      ip: req.ip,
+      userAgent: req.headers['user-agent'],
+      metadata: { targetUid: uid, email },
+    });
+
+    return res.status(201).json({
+      success: true,
+      message: 'Admin user created successfully',
+      uid,
+    });
+  } catch (err) {
+    console.error('Create admin error:', err);
+    return res.status(500).json({ error: err.message, code: 'ADMIN_CREATE_FAILED' });
+  }
+};
 
 /* ══════════════════════════════════════════════════════════════════
    APPROVAL QUEUE  (guests who verified email, awaiting admin step)
