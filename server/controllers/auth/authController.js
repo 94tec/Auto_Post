@@ -53,34 +53,34 @@
  */
 
 import axios                           from 'axios';
-import { admin, adminDb, firebaseAuth } from '../config/firebase.js';
+import { admin, adminDb, firebaseAuth } from '../../config/firebase.js';
 import { signOut }                     from 'firebase/auth';
-import { ROLES, STATUS }               from '../config/roles.js';
+import { ROLES, STATUS }               from '../../config/roles.js';
 import {
   createUser, getUserById, recordLogin,
   markEmailVerified,
-}                                      from '../models/user.js';
-import VerificationModel               from '../models/verificationModel.js';
-import { sendVerificationEmail, sendEmail } from '../services/emailService.js';
-import AuditLog                        from '../services/auditLog.js';
+}                                      from '../../models/user.js';
+import VerificationModel               from '../../models/verificationModel.js';
+import { sendVerificationEmail, sendEmail } from '../../services/emailService.js';
+import AuditLog                        from '../../services/auditLog.js';
 import {
   validateEmailFull,
   validatePasswordStrength,
   hashString,
-}                                      from '../utils/validator.js';
+}                                      from '../../utils/validator.js';
 import {
   handleRegistrationError,
   handleLoginError,
   sendErrorResponse,
   mapFirebaseError,
   getErrorResponse,
-}                                      from '../utils/errorHandler.js';
+}                                      from '../../utils/errorHandler.js';
 import {
   createSessionFingerprint,
   generateCSRFToken,
   setSecurityHeaders,
-}                                      from '../utils/security.js';
-import { checkExistingUser }           from '../services/userService.js';
+}                                      from '../../utils/security.js';
+import { checkExistingUser }           from '../../controllers/auth/userController.js';
 
 /* ── Shared request helpers ──────────────────────────────────────── */
 const getIp = (req) =>
