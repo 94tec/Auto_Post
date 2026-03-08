@@ -1,26 +1,36 @@
 /**
  * routes/userRoutes.js
- * Self-profile reads/updates. Role and permission changes blocked here.
+ * ═══════════════════════════════════════════════════════════════════
+ * Self-service profile endpoints.
+ * Users can only change their own displayName.
+ * Role, permissions, status changes are admin-only.
+ *
+ * All writes use Admin SDK — no client SDK here.
+ * ═══════════════════════════════════════════════════════════════════
  */
-import { Router }              from 'express';
-import { getUserById
- } from '../models/user.js';  // RTDB update
- import { changePassword, updateProfile, deleteAccount } from '../controllers/auth/userController.js'; // Auth + RTDB update  
-import { updateDoc }           from 'firebase/firestore';
-import { doc }                 from 'firebase/firestore';
-import { firestore }           from '../config/firebase.js';
-import { verifyToken, requireActiveAccount } from '../middlewares/auth.js';
-import { apiRateLimiter }      from '../middlewares/rateLimiter.js';
-import { serverTimestamp }     from 'firebase/firestore';
+import { Router }       from 'express';
+import { admin, adminDb, adminFirestore } from '../config/firebase.js';
+import { getUserById }  from '../models/user.js';
+import {
+  changePassword, updateProfile, deleteAccount,
+}                       from '../controllers/auth/userController.js';
+import {
+  verifyToken,
+  requireActiveAccount,
+}                       from '../middlewares/auth.js';
+import { apiRateLimiter } from '../middlewares/rateLimiter.js';
 
 const router = Router();
 router.use(verifyToken, apiRateLimiter);
 
-/** GET /api/users/profile */
+/* ══════════════════════════════════════════════════════════════════
+   GET /api/users/profile
+   ══════════════════════════════════════════════════════════════════ */
 router.get('/profile', async (req, res) => {
   try {
     const user = await getUserById(req.uid);
     if (!user) return res.status(404).json({ error: 'Profile not found', code: 'NOT_FOUND' });
+
     const { basic, permissions, meta } = user;
     return res.status(200).json({
       uid:           req.uid,
@@ -35,36 +45,53 @@ router.get('/profile', async (req, res) => {
       createdAt:     basic?.createdAt,
     });
   } catch (err) {
+    console.error('GET /profile error:', err.message);
     return res.status(500).json({ error: 'Failed to fetch profile', code: 'SERVER_ERROR' });
   }
 });
 
-/** PATCH /api/users/profile — display name only */
+/* ══════════════════════════════════════════════════════════════════
+   PATCH /api/users/profile — displayName only
+   ══════════════════════════════════════════════════════════════════ */
 router.patch('/profile', requireActiveAccount, async (req, res) => {
   const { displayName } = req.body;
+
   if (!displayName?.trim())
-    return res.status(400).json({ error: 'displayName required', code: 'MISSING_FIELDS' });
+    return res.status(400).json({ error: 'displayName is required', code: 'MISSING_FIELDS' });
+
   if (displayName.trim().length < 2 || displayName.trim().length > 50)
-    return res.status(400).json({ error: 'displayName must be 2–50 characters', code: 'INVALID_LENGTH' });
+    return res.status(400).json({
+      error: 'displayName must be between 2 and 50 characters',
+      code:  'INVALID_LENGTH',
+    });
+
+  const trimmed = displayName.trim();
+  const now     = new Date().toISOString();
 
   try {
-    // Update RTDB
-    const { ref: rtdbRef, update: rtdbUpdate } = await import('firebase/database');
-    const { db } = await import('../config/firebase.js');
-    await rtdbUpdate(rtdbRef(db, `users/${req.uid}`), {
-      'basic/displayName': displayName.trim(),
-      'basic/updatedAt':   new Date().toISOString(),
+    // ── RTDB (Admin SDK) ──────────────────────────────────────────
+    await adminDb.ref(`users/${req.uid}`).update({
+      'basic/displayName': trimmed,
+      'basic/updatedAt':   now,
     });
-    // Update Firestore
-    await updateDoc(doc(firestore, 'users', req.uid), {
-      displayName: displayName.trim(),
-      updatedAt:   serverTimestamp(),
+
+    // ── Firestore (Admin SDK) ─────────────────────────────────────
+    await adminFirestore.collection('users').doc(req.uid).update({
+      displayName: trimmed,
+      updatedAt:   admin.firestore.FieldValue.serverTimestamp(),
     });
-    return res.status(200).json({ message: 'Profile updated', displayName: displayName.trim() });
+
+    return res.status(200).json({
+      success:     true,
+      message:     'Profile updated successfully.',
+      displayName: trimmed,
+    });
   } catch (err) {
-    return res.status(500).json({ error: 'Failed to update', code: 'SERVER_ERROR' });
+    console.error('PATCH /profile error:', err.message);
+    return res.status(500).json({ error: 'Failed to update profile', code: 'SERVER_ERROR' });
   }
 });
+
 /* ══════════════════════════════════════════════════════════════
    POST /api/users/change-password
    ══════════════════════════════════════════════════════════════ */

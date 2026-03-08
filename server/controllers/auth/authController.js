@@ -80,7 +80,7 @@ import {
   generateCSRFToken,
   setSecurityHeaders,
 }                                      from '../../utils/security.js';
-import { checkExistingUser }           from '../../controllers/auth/userController.js';
+import { checkExistingUser }           from './userController.js';
 
 /* ── Shared request helpers ──────────────────────────────────────── */
 const getIp = (req) =>

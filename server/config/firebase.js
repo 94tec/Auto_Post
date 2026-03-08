@@ -1,56 +1,58 @@
 /**
  * config/firebase.js
- * ═══════════════════════════════════════════════════════════════════
- * Initialises Firebase Admin SDK, Realtime Database, and Firestore.
- *
- * RTDB      → hot path for auth/permission reads (low latency)
- * Firestore → rich queries, audit logs, approval queue, user profiles
- * ═══════════════════════════════════════════════════════════════════
  */
 
-import admin      from 'firebase-admin';
+import admin                              from 'firebase-admin';
 import { initializeApp as initClientApp } from 'firebase/app';
-import { getDatabase }  from 'firebase/database';
-import { getFirestore } from 'firebase/firestore';
-import { createRequire } from 'module';
+import { getAuth }                        from 'firebase/auth';
 
-const require = createRequire(import.meta.url);
-
-// ── Admin SDK (server-side) ──────────────────────────────────────────
+/* ── Admin SDK ───────────────────────────────────────────────────────
+   projectId   → required for Firestore gRPC endpoint resolution
+   databaseURL → required for RTDB
+   credential  → service account bypasses all security rules
+ ─────────────────────────────────────────────────────────────────── */
 if (!admin.apps.length) {
-  const serviceAccount = process.env.FIREBASE_SERVICE_ACCOUNT_PATH;
+  const serviceAccountPath = process.env.FIREBASE_SERVICE_ACCOUNT_PATH;
 
   admin.initializeApp({
-    credential:   admin.credential.cert(serviceAccount),
-    databaseURL:  process.env.FIREBASE_DATABASE_URL,
+    credential:  admin.credential.cert(serviceAccountPath),
+    databaseURL: process.env.FIREBASE_DATABASE_URL,
+    projectId:   process.env.FIREBASE_PROJECT_ID,   // ← THE FIX for "5 NOT_FOUND"
   });
 }
 
-// ── Client SDK (for Realtime DB + Firestore reads) ───────────────────
-const clientApp = initClientApp({
-  apiKey:            process.env.FIREBASE_API_KEY,
-  authDomain:        process.env.FIREBASE_AUTH_DOMAIN,
-  databaseURL:       process.env.FIREBASE_DATABASE_URL,
-  projectId:         process.env.FIREBASE_PROJECT_ID,
-  storageBucket:     process.env.FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: process.env.FIREBASE_MESSAGING_SENDER_ID,
-  appId:             process.env.FIREBASE_APP_ID,
-}, 'client');
-
-/** Firebase Admin SDK instance */
+/** Firebase Admin SDK namespace. Use admin.auth(), admin.firestore.FieldValue, etc. */
 export { admin };
 
-/** Admin Auth instance – for token verification, user management, etc. */
-export const firebaseAuth = admin.auth();
+/**
+ * Admin Realtime Database — use for ALL RTDB operations.
+ * adminDb.ref('users/uid').set / update / once('value') / remove
+ */
+export const adminDb = admin.database();
 
-/** Realtime Database (client SDK) — hot permission reads */
-export const db = getDatabase(clientApp);
-
-/** Firestore (client SDK) — queries, audit, approval queue */
-export const firestore = getFirestore(clientApp);
-
-/** Admin Firestore — server writes with elevated privilege */
+/**
+ * Admin Firestore — use for ALL Firestore operations.
+ * adminFirestore.collection('x').doc('y').set / update / get / delete
+ * Server timestamp: admin.firestore.FieldValue.serverTimestamp()
+ */
 export const adminFirestore = admin.firestore();
 
-/** Admin RTDB — server writes */
-export const adminDb = admin.database();
+// Drop undefined fields silently instead of throwing.
+// Fixes: "Cannot use undefined as a Firestore value" in audit logs.
+adminFirestore.settings({ ignoreUndefinedProperties: true });
+
+/* ── Client SDK — Auth only ──────────────────────────────────────────
+   Used ONLY for firebaseAuth.signOut() in the logout controller.
+   Do NOT use for any database reads or writes.
+ ─────────────────────────────────────────────────────────────────── */
+const _clientApp = initClientApp({
+  apiKey:     process.env.FIREBASE_API_KEY,
+  authDomain: process.env.FIREBASE_AUTH_DOMAIN,
+  projectId:  process.env.FIREBASE_PROJECT_ID,
+}, 'client');
+
+/**
+ * Client Auth — signOut() only.
+ * Never use getDatabase(clientApp) or getFirestore(clientApp) on the server.
+ */
+export const firebaseAuth = getAuth(_clientApp);
