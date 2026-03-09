@@ -1,0 +1,4 @@
+*.http
+*.json
+.quotesapp-26f84-firebase-adminsdk-fbsvc-d247cc6b4d.json
+.env
