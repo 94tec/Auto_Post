@@ -8,6 +8,7 @@ import express from 'express';
 import helmet from 'helmet';
 import cors from 'cors';
 import morgan from 'morgan';
+import cookieParser from 'cookie-parser';
 
 import router from './routes/routes.js';
 import { notFound, errorHandler } from './utils/errorHandler.js';
@@ -21,6 +22,11 @@ app.set('trust proxy', 1);
 
 app.use(express.json({ limit: '100kb' }));
 app.use(express.urlencoded({ extended: false }));
+
+/* ── Signed cookie support ────────────────────────────────────── */
+// COOKIE_SECRET must be set in .env — generate with:
+//   node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
+app.use(cookieParser(process.env.COOKIE_SECRET));
 
 /* ───────────────── Security ───────────── */
 

@@ -3,25 +3,6 @@
  * ═══════════════════════════════════════════════════════════════════
  * Email delivery + verification token management.
  *
- * WHAT CHANGED vs old version
- * ───────────────────────────────────────────────────────────────────
- *  • ALL Firestore writes → adminFirestore (Admin SDK).
- *    Old code used client SDK (setDoc, getDocs, updateDoc from
- *    'firebase/firestore') which hit security rules and threw
- *    Code 7 PERMISSION_DENIED on the server.
- *
- *  • ALL RTDB writes → adminDb.ref() (Admin SDK).
- *    Old verifyEmailLink used db.ref() (client SDK) → PERMISSION_DENIED.
- *
- *  • resendEmailVerification and verifyEmailLink removed from this file.
- *    Those are now handled by authController (resendVerification,
- *    verifyEmail) which were already rewritten correctly.
- *    Having them here too was dead / conflicting code.
- *
- *  • sendEmail and sendVerificationEmail are the only exports needed
- *    by the rest of the codebase. Kept exactly as-is except the
- *    verificationRecord write now goes through adminFirestore.
- *
  * EXPORTS
  * ───────────────────────────────────────────────────────────────────
  *  sendEmail             — generic nodemailer wrapper
