@@ -27,7 +27,7 @@
 # ── Tokens ────────────────────────────────────────────────────────────
 # Firebase ID tokens expire after 1 hour.
 # Re-run POST /api/auth/login to get a fresh one.
-@adminToken = PASTE_ADMIN_ID_TOKEN_HERE
+@adminToken = eyJhbGciOiJSUzI1NiIsImtpZCI6ImEyZGZiOGEzOGI1MmQ5ZjA5ZWRjYWE1MDcwYTBlOGYwYTllMDk4YmEiLCJ0eXAiOiJKV1QifQ.eyJuYW1lIjoiRml4dG9uZSBEYW11Y2hpIiwiaXNzIjoiaHR0cHM6Ly9zZWN1cmV0b2tlbi5nb29nbGUuY29tL3F1b3Rlc2FwcC0yNmY4NCIsImF1ZCI6InF1b3Rlc2FwcC0yNmY4NCIsImF1dGhfdGltZSI6MTc3MzI2MjU5MCwidXNlcl9pZCI6IkFKS2c1YVRobEpmOEFwdVVwUkdXT1RwT0hLQjIiLCJzdWIiOiJBSktnNWFUaGxKZjhBcHVVcFJHV09UcE9IS0IyIiwiaWF0IjoxNzczMjYyNTkwLCJleHAiOjE3NzMyNjYxOTAsImVtYWlsIjoiZml4dG9uZTk0dGVjQGdtYWlsLmNvbSIsImVtYWlsX3ZlcmlmaWVkIjp0cnVlLCJmaXJlYmFzZSI6eyJpZGVudGl0aWVzIjp7ImVtYWlsIjpbImZpeHRvbmU5NHRlY0BnbWFpbC5jb20iXX0sInNpZ25faW5fcHJvdmlkZXIiOiJwYXNzd29yZCJ9fQ.vW-umicrVgVtiTMGLiTdr2YVKERI3DeI2YE0tkuZTcFMwQ3xhfRTDfqlg2iZ9qTAYdnF1c1RzRtMbrXldbos-P-yX3f1Db99BRE94VxGmAYnTSkPG1hq5w_Yi3iX6NJZV046JPFSYt3ne7-ZncgVSX2lAQiBGA85VdegM2wgVkn_xiC3oQnq5BxLaMMsFMsOEBNggtCjAAPtQZb5tXILFlCimq8sL2dKqBXWdZwxJmZOqLEbpvbJX2pSc49seEXsGWQ6OEfUHGq4ILv49iVluztkssB0cRtQ93fO4pRiIRnCHVoxRgYa4wSJHORlrEdxxqpxHXdMeqxSt9vFgl9YDg%7C7d6a2e5d90eb061fc525d031a05ab9909f9b69373b42260d2c332f5f53a2e3d6.YxCtoqlodX6DhKKoKM8mPiIuINErtANG4gIO3QRIw4U
 @userToken  = PASTE_USER_ID_TOKEN_HERE
 
 # ── UIDs ──────────────────────────────────────────────────────────────
@@ -44,6 +44,8 @@
 
 //POST /api/admin/users
 POST {{authBase}}/register
+
+//POST {{authBase}}/register
 Content-Type: application/json
 
 {
@@ -58,7 +60,7 @@ POST {{authBase}}/register
 Content-Type: application/json
 
 {
-  "email": "miriamatieno09@gmail.com",
+  "email": "mtengo0109@yahoo.com",
   "password": "Strong@Pass123!",
   "displayName": "Miriam Atieno"
 }
@@ -173,7 +175,9 @@ POST {{authBase}}/login
 Content-Type: application/json
 
 {
-  "idToken": "PASTE_FIREBASE_ID_TOKEN_FROM_CLIENT_SDK_HERE"
+  "email": "fixtone94tec@gmail.com",
+  "password": "YourStrongPass123",
+  "returnSecureToken": true
 }
 
 ###
@@ -214,9 +218,9 @@ POST {{authBase}}/verify-email
 Content-Type: application/json
 
 {
-  "oobCode": "PASTE_OOBCODE_FROM_VERIFICATION_EMAIL_LINK",
-  "uid": "PASTE_UID_OF_THE_REGISTERING_USER",
-  "email": "miriamatieno09@gmail.com"
+  "oobCode": "MJNie7U84jSdT4eAW52zgTvtFLEOPAdZkmCDfWdJ-9IAAAGc264Bdw",
+  "uid": "1uaiYoVYaTRzOpFxnCrDqTy80ut2",
+  "email": "mtengo0109@yahoo.com"
 }
 
 ###
