@@ -25,14 +25,13 @@
 # ── Tokens ────────────────────────────────────────────────────────────
 # Paste a fresh token after running POST /api/auth/login
 # Firebase tokens expire after 1 hour
-@userToken  = PASTE_USER_ID_TOKEN_HERE
-@adminToken = PASTE_ADMIN_ID_TOKEN_HERE
-
+@userToken  = eyJhbGciOiJSUzI1NiIsImtpZCI6IjczMmNhOTY3MTNiMWRkMTcyMzg1MDg0Y2U5ZjQzODFhZDAwY2VjZTQiLCJ0eXAiOiJKV1QifQ.eyJuYW1lIjoiRml4dG9uZSBEYW11Y2hpIiwiaXNzIjoiaHR0cHM6Ly9zZWN1cmV0b2tlbi5nb29nbGUuY29tL3F1b3Rlc2FwcC0yNmY4NCIsImF1ZCI6InF1b3Rlc2FwcC0yNmY4NCIsImF1dGhfdGltZSI6MTc3NDAwMTk4MiwidXNlcl9pZCI6Ims1a2FqNmxIY2xhSFBjaUN3T0tqeEdWQ0VkbzIiLCJzdWIiOiJrNWthajZsSGNsYUhQY2lDd09LanhHVkNFZG8yIiwiaWF0IjoxNzc0MDAxOTgyLCJleHAiOjE3NzQwMDU1ODIsImVtYWlsIjoiZml4dG9uZTk0dGVjQGdtYWlsLmNvbSIsImVtYWlsX3ZlcmlmaWVkIjp0cnVlLCJmaXJlYmFzZSI6eyJpZGVudGl0aWVzIjp7ImVtYWlsIjpbImZpeHRvbmU5NHRlY0BnbWFpbC5jb20iXX0sInNpZ25faW5fcHJvdmlkZXIiOiJwYXNzd29yZCJ9fQ.uu2cbgx-n_yG9LSjD7voCXBPMgXEpsbfwAAqxdXccIq9HMHar6YnuyNPQzrw7WG7iJUOYRCUhq0011-S6aWq1X8oB5EGbdRUOR6e7PdM_XjjX-cEWHKLhjiRcZ2jqtOLDqcL9auqqqMCHanDImnLaMiNd6d00bg6MsKhBYuOwpuPQD_Ym7ULgYJTd6TLdDP7_ha9tJbMosjuY-Gh7gWLonXzEp0ZLY5IDuf0BE_DFNtYzfJCbIqKMSlMNdCrMS4v41fz64t738xp8MQD_FdIoA0h22HmxjQ6y8TXA-19TBqmBedz-iv30MnX7JwddmrlsuYy2UTPnzkNrmqlXt2zTA
+@adminToken = eyJhbGciOiJSUzI1NiIsImtpZCI6IjczMmNhOTY3MTNiMWRkMTcyMzg1MDg0Y2U5ZjQzODFhZDAwY2VjZTQiLCJ0eXAiOiJKV1QifQ.eyJuYW1lIjoiRml4dG9uZSBEYW11Y2hpIiwiaXNzIjoiaHR0cHM6Ly9zZWN1cmV0b2tlbi5nb29nbGUuY29tL3F1b3Rlc2FwcC0yNmY4NCIsImF1ZCI6InF1b3Rlc2FwcC0yNmY4NCIsImF1dGhfdGltZSI6MTc3NDAwMTk4MiwidXNlcl9pZCI6Ims1a2FqNmxIY2xhSFBjaUN3T0tqeEdWQ0VkbzIiLCJzdWIiOiJrNWthajZsSGNsYUhQY2lDd09LanhHVkNFZG8yIiwiaWF0IjoxNzc0MDAxOTgyLCJleHAiOjE3NzQwMDU1ODIsImVtYWlsIjoiZml4dG9uZTk0dGVjQGdtYWlsLmNvbSIsImVtYWlsX3ZlcmlmaWVkIjp0cnVlLCJmaXJlYmFzZSI6eyJpZGVudGl0aWVzIjp7ImVtYWlsIjpbImZpeHRvbmU5NHRlY0BnbWFpbC5jb20iXX0sInNpZ25faW5fcHJvdmlkZXIiOiJwYXNzd29yZCJ9fQ.uu2cbgx-n_yG9LSjD7voCXBPMgXEpsbfwAAqxdXccIq9HMHar6YnuyNPQzrw7WG7iJUOYRCUhq0011-S6aWq1X8oB5EGbdRUOR6e7PdM_XjjX-cEWHKLhjiRcZ2jqtOLDqcL9auqqqMCHanDImnLaMiNd6d00bg6MsKhBYuOwpuPQD_Ym7ULgYJTd6TLdDP7_ha9tJbMosjuY-Gh7gWLonXzEp0ZLY5IDuf0BE_DFNtYzfJCbIqKMSlMNdCrMS4v41fz64t738xp8MQD_FdIoA0h22HmxjQ6y8TXA-19TBqmBedz-iv30MnX7JwddmrlsuYy2UTPnzkNrmqlXt2zTA
 # ── Quote IDs ─────────────────────────────────────────────────────────
 # Fill in after running Section 1 (GET all) or Section 3 (create)
-@quoteId      = PASTE_QUOTE_ID_HERE
-@ownQuoteId   = PASTE_YOUR_OWN_QUOTE_ID_HERE
-@otherQuoteId = PASTE_ANOTHER_USERS_QUOTE_ID_HERE
+@quoteId      = NVRFyMNvkgcK5BJ4AfeT
+@ownQuoteId   = NVRFyMNvkgcK5BJ4AfeT
+@otherQuoteId = NVRFyMNvkgcK5BJ4AfeT
 
 
 ### ═══════════════════════════════════════════════════════════════════
@@ -105,9 +104,9 @@ Authorization: Bearer {{userToken}}
 Content-Type: application/json
 
 {
-  "text": "Discipline equals freedom.",
-  "author": "Jocko Willink",
-  "category": "motivation"
+  "text": "Suffering is a test. That's all it is.",
+  "author": "David Goggins",
+  "category": "resilience"
 }
 
 ###

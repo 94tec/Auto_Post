@@ -10,6 +10,7 @@ import authRoutes  from './authRoutes.js';
 import quoteRoutes from './qouteRoutes.js';
 import userRoutes  from './userRoutes.js';
 import adminRoutes from './adminRoutes.js';
+import guestQuoteRoutes from './guestQuotes.js';  
 
 const router = Router();
 
@@ -17,6 +18,7 @@ router.use('/auth',   authRoutes);
 router.use('/quotes', quoteRoutes);
 router.use('/users',  userRoutes);
 router.use('/admin',  adminRoutes);
+router.use('/guest-quotes', guestQuoteRoutes);  // from routes/guestQuotes.js
 router.get('/health', (_, res) => res.json({ ok: true, ts: new Date().toISOString() }));
 
 export default router;

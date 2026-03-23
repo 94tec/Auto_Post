@@ -18,10 +18,10 @@ import {
   verifyToken,
   requireActiveAccount,
 }                       from '../middlewares/auth.js';
-import { apiRateLimiter } from '../middlewares/rateLimiter.js';
+import { apiLimiter } from '../middlewares/rateLimiter.js';
 
 const router = Router();
-router.use(verifyToken, apiRateLimiter);
+router.use(verifyToken, apiLimiter);
 
 /* ══════════════════════════════════════════════════════════════════
    GET /api/users/profile

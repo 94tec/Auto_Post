@@ -1,250 +1,383 @@
-// DailyCard.jsx 
-import { motion, AnimatePresence } from "framer-motion";
-import { useState, useEffect, useRef } from "react";
-import { FiChevronLeft, FiMenu, FiPhone, FiMail } from "react-icons/fi";
-import quotes from "../assets/quotes2.json";
+// DailyCard.jsx
+// Phone mockup component:
+//  - Reads from `lyrics` Firestore collection (separate from quotes)
+//  - Admin-only "Add Lyric" CTA inside phone
+//  - All phone app icons are interactive (navigate on tap)
+//  - Contact CTA button
+//  - Exported as default (bare frame) + named DailyCardPage (standalone)
 
-const ACCENT_GRADIENT = 'from-[#F59E0B] to-[#F97316]';
+import { motion, AnimatePresence } from 'framer-motion';
+import { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
+import {
+  FiChevronLeft, FiChevronRight, FiWifi, FiCamera,
+  FiBookOpen, FiStar, FiSettings, FiCopy, FiShare2,
+  FiPlus, FiMail, FiMusic, FiSearch, FiZap,
+} from 'react-icons/fi';
+import { toast } from 'react-hot-toast';
+import useRole from '../hooks/useRole';
+import { ROLES } from '../store/authSlice';
 
-const DailyCard = () => {
-  const [month, setMonth] = useState("");
-  const [dayWithSuffix, setDayWithSuffix] = useState("");
-  const [quoteIndex, setQuoteIndex] = useState(0);
-  const [isAutoRotating, setIsAutoRotating] = useState(true);
+/* ── helpers ──────────────────────────────────────────────── */
+const getDaySuffix = (d) =>
+  [1,21,31].includes(d) ? 'st' : [2,22].includes(d) ? 'nd' : [3,23].includes(d) ? 'rd' : 'th';
+
+/* ── Full CAT_META with all categories ────────────────────── */
+const CAT_META = {
+  motivation:    { color: '#F59E0B', label: '🔥 Motivation'    },
+  mindset:       { color: '#818CF8', label: '🧠 Mindset'       },
+  discipline:    { color: '#34D399', label: '⚡ Discipline'     },
+  success:       { color: '#A78BFA', label: '🏆 Success'       },
+  resilience:    { color: '#FB923C', label: '💪 Resilience'    },
+  persistence:   { color: '#38BDF8', label: '🎯 Persistence'   },
+  belief:        { color: '#C084FC', label: '🌟 Belief'        },
+  action:        { color: '#86EFAC', label: '⚡ Action'        },
+  growth:        { color: '#2DD4BF', label: '🌱 Growth'        },
+  determination: { color: '#F87171', label: '🔑 Determination' },
+  inspiration:   { color: '#7DD3FC', label: '✨ Inspiration'   },
+  // Lyrics-specific genres
+  gospel:        { color: '#FCD34D', label: '🙏 Gospel'        },
+  afrobeat:      { color: '#10B981', label: '🎵 Afrobeat'      },
+  rnb:           { color: '#EC4899', label: '💿 R&B'           },
+  hiphop:        { color: '#8B5CF6', label: '🎤 Hip-Hop'       },
+  pop:           { color: '#06B6D4', label: '🎶 Pop'           },
+  soul:          { color: '#F97316', label: '🎸 Soul'          },
+};
+const cc = (c) => CAT_META[c]?.color ?? '#F59E0B';
+const cl = (c) => CAT_META[c]?.label ?? c;
+
+const AUTO_INTERVAL = 10_000;
+const RESUME_DELAY  = 30_000;
+
+/* ── Fallback lyrics (used while API loads) ─────────────────── */
+const FALLBACK_LYRICS = [
+  { id: 'f1', text: 'You were made for more than this moment.', artist: 'Damuchi', genre: 'inspiration' },
+  { id: 'f2', text: 'Every setback is the universe preparing a comeback.', artist: 'Damuchi', genre: 'resilience' },
+  { id: 'f3', text: "Don't count the days, make the days count.", artist: 'Muhammad Ali', genre: 'motivation' },
+];
+
+/* ── Battery ──────────────────────────────────────────────── */
+const Battery = ({ pct = 78 }) => (
+  <div className="flex items-center gap-0.5">
+    <span className="text-[9px] text-white/55">{pct}%</span>
+    <div className="relative w-5 h-2.5 rounded-[2px] border border-white/35 flex items-center px-[1px]">
+      <div className="h-[7px] rounded-[1px] transition-all"
+           style={{ width: `${pct}%`, background: pct > 20 ? '#4ade80' : '#f87171' }} />
+    </div>
+    <div className="w-[2px] h-[5px] rounded-r-sm bg-white/30 ml-[-1px]" />
+  </div>
+);
+
+/* ── Signal ───────────────────────────────────────────────── */
+const Signal = ({ bars = 4 }) => (
+  <div className="flex items-end gap-[2px]">
+    {[1,2,3,4].map(i => (
+      <div key={i} className="w-[3px] rounded-[1px]"
+           style={{ height: `${4 + i * 2.5}px`, background: i <= bars ? 'rgba(255,255,255,0.7)' : 'rgba(255,255,255,0.18)' }} />
+    ))}
+  </div>
+);
+
+/* ── App icon (interactive) ────────────────────────────────── */
+const AppIcon = ({ icon: Icon, label, color, onClick }) => (
+  <motion.button
+    whileTap={{ scale: 0.8 }}
+    whileHover={{ scale: 1.08 }}
+    onClick={onClick}
+    className="flex flex-col items-center gap-1 cursor-pointer"
+  >
+    <div className="w-11 h-11 rounded-[14px] flex items-center justify-center shadow-lg transition-all"
+         style={{ background: `${color}22`, border: `1px solid ${color}35` }}>
+      <Icon size={18} style={{ color }} />
+    </div>
+    <span className="text-[8px] text-white/45 font-medium leading-none">{label}</span>
+  </motion.button>
+);
+
+/* ════════════════════════════════════════════════════════════
+   DAILY CARD
+════════════════════════════════════════════════════════════ */
+const DailyCard = ({ onContactOpen, onAddLyric }) => {
+  const navigate = useNavigate();
+  const { isAdmin } = useRole();
+  const [dateLabel, setDateLabel] = useState({ month: '', day: '', weekday: '', time: '' });
+  const [idx,    setIdx]    = useState(0);
+  const [autoOn, setAutoOn] = useState(true);
+  const [battery]           = useState(Math.floor(Math.random() * 40) + 55);
   const intervalRef = useRef(null);
+  const resumeRef   = useRef(null);
 
-  useEffect(() => {
-    if (isAutoRotating) {
-      intervalRef.current = setInterval(() => {
-        setQuoteIndex((prevIndex) => (prevIndex + 1) % quotes.length);
-      }, 10000);
-    } else {
-      clearInterval(intervalRef.current);
-    }
-    return () => clearInterval(intervalRef.current);
-  }, [isAutoRotating]);
+  /* ── Fetch lyrics from API ──────────────────────────────── */
+  const { data } = useQuery({
+    queryKey: ['lyrics'],
+    queryFn:  async () => {
+      const res = await fetch('/api/lyrics');
+      if (!res.ok) throw new Error('Failed to load lyrics');
+      return res.json();
+    },
+    staleTime: 5 * 60_000,
+  });
+  const lyrics = data?.lyrics?.length ? data.lyrics : FALLBACK_LYRICS;
 
+  /* live clock */
   useEffect(() => {
-    const date = new Date();
-    const monthStr = new Intl.DateTimeFormat("en-US", { month: "long" }).format(date);
-    const day = date.getDate();
-    const suffix = [1,21,31].includes(day) ? "st" : [2,22].includes(day) ? "nd" : [3,23].includes(day) ? "rd" : "th";
-    setMonth(monthStr);
-    setDayWithSuffix(`${day}${suffix}`);
+    const tick = () => {
+      const d = new Date();
+      setDateLabel({
+        weekday: new Intl.DateTimeFormat('en-US', { weekday: 'long'  }).format(d),
+        month:   new Intl.DateTimeFormat('en-US', { month:   'long'  }).format(d),
+        day:     `${d.getDate()}${getDaySuffix(d.getDate())}`,
+        time:    d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }),
+      });
+    };
+    tick();
+    const id = setInterval(tick, 30000);
+    return () => clearInterval(id);
   }, []);
 
-  const quote = quotes[quoteIndex];
+  /* auto-rotate */
+  useEffect(() => {
+    clearInterval(intervalRef.current);
+    if (autoOn) intervalRef.current = setInterval(
+      () => setIdx(i => (i + 1) % lyrics.length), AUTO_INTERVAL,
+    );
+    return () => clearInterval(intervalRef.current);
+  }, [autoOn, lyrics.length]);
 
-  const handleNextQuote = () => {
-    setQuoteIndex((prevIndex) => (prevIndex + 1) % quotes.length);
-    setIsAutoRotating(false);
-    setTimeout(() => setIsAutoRotating(true), 30000);
+  const pauseWithResume = () => {
+    clearTimeout(resumeRef.current);
+    setAutoOn(false);
+    resumeRef.current = setTimeout(() => setAutoOn(true), RESUME_DELAY);
   };
 
-  const handlePrevQuote = () => {
-    setQuoteIndex((prevIndex) => (prevIndex - 1 + quotes.length) % quotes.length);
-    setIsAutoRotating(false);
-    setTimeout(() => setIsAutoRotating(true), 30000);
+  const bump = (dir) => {
+    setIdx(i => (i + dir + lyrics.length) % lyrics.length);
+    pauseWithResume();
   };
 
-  const getCategoryColor = (category) => {
-    // Use gold for all categories? Or keep original? We'll use gold gradient for consistency.
-    return ACCENT_GRADIENT;
+  const handleCopy = () => {
+    const l = lyrics[idx];
+    navigator.clipboard.writeText(`"${l.text}" — ${l.artist}`);
+    toast.success('Copied!');
   };
+
+  const handleShare = async () => {
+    const l = lyrics[idx];
+    try {
+      await navigator.share({ title: 'Damuchi', text: `"${l.text}" — ${l.artist}`, url: window.location.href });
+    } catch { handleCopy(); }
+  };
+
+  const lyric  = lyrics[Math.min(idx, lyrics.length - 1)];
+  const accent = cc(lyric?.genre || lyric?.category);
+
+  const apps = [
+    { icon: FiBookOpen, label: 'Quotes',  color: accent,    onClick: () => navigate('/quotes') },
+    { icon: FiStar,     label: 'Favs',    color: '#818CF8', onClick: () => navigate('/dashboard') },
+    { icon: FiSearch,   label: 'Search',  color: '#38BDF8', onClick: () => navigate('/quotes?search=') },
+    { icon: FiSettings, label: 'Settings',color: '#6B7280', onClick: () => navigate('/dashboard') },
+  ];
 
   return (
-    <div className="min-h-screen bg-[#0A0E1A] flex items-center justify-center p-4 font-sans">
-      <div className="relative w-full max-w-[360px] h-[640px] bg-[linear-gradient(180deg,_#0A0E1A_0%,_#050505_25%,_#1a1a1a_50%,_#0A0E1A_95%,_#050505_100%)] rounded-[36px] shadow-[0_30px_60px_rgba(0,0,0,0.8)] overflow-hidden border border-gray-700/50">
+    <motion.div
+      initial={{ opacity: 0, scale: 0.92, y: 20 }}
+      animate={{ opacity: 1, scale: 1, y: 0 }}
+      transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+      className="relative select-none"
+      style={{ width: 300 }}
+    >
+      {/* glow behind phone */}
+      <div className="absolute inset-0 rounded-[44px] blur-[40px] opacity-20"
+           style={{ background: accent, transform: 'scale(0.85) translateY(8%)' }} />
 
-        {/* Screen glare */}
-        <div className="absolute inset-0 pointer-events-none">
-          <div className="absolute top-0 right-0 w-1/2 h-1/3 bg-gradient-to-br from-white/5 to-transparent rounded-full blur-xl"></div>
-        </div>
+      {/* phone shell */}
+      <div className="relative rounded-[44px] overflow-hidden border border-white/12 shadow-[0_32px_64px_rgba(0,0,0,0.7)]"
+           style={{ background: 'linear-gradient(165deg,#141E2E,#0A0E1A,#0D1520)' }}>
 
-        {/* Notch */}
-        <div className="absolute top-4 left-1/2 -translate-x-1/2 w-[130px] h-[30px] bg-black/90 rounded-full z-10 border border-gray-700/50" />
+        {/* side buttons */}
+        <div className="absolute -right-[2px] top-24 w-[3px] h-12 rounded-l-full bg-white/10" />
+        <div className="absolute -left-[2px] top-20 w-[3px] h-8 rounded-r-full bg-white/10" />
+        <div className="absolute -left-[2px] top-32 w-[3px] h-8 rounded-r-full bg-white/10" />
 
-        {/* Top buttons */}
-        <div className="absolute top-3 left-3 z-20">
-          <motion.button
-            whileHover={{ scale: 1.1 }}
-            whileTap={{ scale: 0.9 }}
-            className="w-8 h-8 bg-white/10 border border-white/20 rounded-full flex items-center justify-center text-white/80 backdrop-blur-md shadow-sm hover:text-white transition-colors"
-          >
-            <FiChevronLeft size={16} />
-          </motion.button>
-        </div>
-        <div className="absolute top-3 right-3 z-20">
-          <motion.button
-            whileHover={{ scale: 1.1 }}
-            whileTap={{ scale: 0.9 }}
-            className="w-8 h-8 bg-white/10 border border-white/20 rounded-full flex items-center justify-center text-white/80 backdrop-blur-md shadow-sm hover:text-white transition-colors"
-          >
-            <FiMenu size={16} />
-          </motion.button>
-        </div>
+        <div className="relative px-5 pt-4 pb-5 flex flex-col gap-3">
 
-        {/* Status bar */}
-        <div className="absolute top-5 left-0 right-0 px-16 flex justify-between items-center z-10">
-          <span className="text-xs text-white/70 font-medium">94tec</span>
-          <div className="flex items-center gap-1">
-            {[...Array(3)].map((_, i) => (
-              <div key={i} className="w-2.5 h-2.5 rounded-full border border-white/30 bg-white/10 backdrop-blur-sm" />
-            ))}
+          {/* status bar */}
+          <div className="flex items-center justify-between px-1">
+            <span className="text-[10px] font-semibold text-white/60">{dateLabel.time}</span>
+            <div className="w-20 h-5 rounded-full bg-black/60 flex items-center justify-center gap-2 border border-white/8">
+              <div className="w-1.5 h-1.5 rounded-full bg-white/30" />
+              <div className="w-1 h-1 rounded-full bg-white/20" />
+            </div>
+            <div className="flex items-center gap-1.5">
+              <Signal bars={4} />
+              <FiWifi size={10} className="text-white/55" />
+              <Battery pct={battery} />
+            </div>
           </div>
-        </div>
 
-        {/* Date section */}
-        <motion.div
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3, duration: 0.6 }}
-          className="absolute top-20 left-0 right-0 px-4 pointer-events-none z-10"
-        >
-          <div className="relative w-full max-w-[95%] mx-auto px-4 py-6 flex flex-col items-center justify-center overflow-hidden">
-            <motion.div
-              animate={{ rotate: 360 }}
-              transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
-              className="absolute inset-0 rounded-full border-[6px] border-transparent border-t-white/10 border-r-white/5"
-            />
-            <div className="absolute -top-6 left-1/2 -translate-x-1/2 w-24 h-24 bg-[#F59E0B]/20 rounded-full blur-3xl animate-ping z-[-1]" />
-            <div className="absolute -top-6 left-1/2 -translate-x-1/2 w-16 h-16 bg-[#F97316]/15 rounded-full blur-2xl z-[-1]" />
-            {[...Array(8)].map((_, i) => (
-              <div
-                key={i}
-                className="absolute bg-white/20 rounded-full pointer-events-none"
-                style={{
-                  width: `${Math.random() * 4 + 2}px`,
-                  height: `${Math.random() * 4 + 2}px`,
-                  top: `${Math.random() * 100}%`,
-                  left: `${Math.random() * 100}%`,
-                  animation: `floatGlow ${Math.random() * 12 + 8}s ease-in-out infinite`,
-                  opacity: Math.random() * 0.3 + 0.1,
-                }}
-              />
-            ))}
-            <motion.h1
-              whileHover={{ scale: 1.05 }}
-              className={`text-xl tracking-widest uppercase select-none bg-gradient-to-r ${ACCENT_GRADIENT} bg-clip-text text-transparent drop-shadow-md`}
-            >
-              {month}
-            </motion.h1>
-            <motion.h2
-              whileHover={{ scale: 1.08 }}
-              className={`text-5xl font-bold tracking-tight leading-none mt-1 drop-shadow-xl select-none bg-gradient-to-br ${ACCENT_GRADIENT} bg-clip-text text-transparent`}
-            >
-              {dayWithSuffix}
-            </motion.h2>
+          {/* date */}
+          <div className="text-center py-1">
+            <p className="text-[10px] text-white/35 uppercase tracking-[0.18em]">{dateLabel.weekday}</p>
+            <h2 className="text-[32px] font-black text-white leading-tight tracking-tight">
+              {dateLabel.day}
+            </h2>
+            <p className="text-[11px] text-white/40 tracking-wide">{dateLabel.month}</p>
           </div>
-        </motion.div>
 
-        {/* Quote card */}
-        <div className="absolute top-[250px] left-0 right-0 px-4 z-20">
-          <motion.div
-            initial={{ opacity: 0, y: 30 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.4, duration: 0.5 }}
-            className="w-full max-w-[97%] mx-auto px-5 py-6 rounded-3xl relative overflow-hidden"
-            style={{
-              background: "#1C2135",
-              boxShadow: "0 4px 30px rgba(0,0,0,0.5)",
-              backdropFilter: "blur(2px)",
-              WebkitBackdropFilter: "blur(2px)",
-              border: "1px solid rgba(255,255,255,0.1)",
-            }}
-          >
-            {quote?.category && (
-              <div className={`absolute top-2 right-2.5 text-[10px] font-bold px-2 py-0.5 rounded-full bg-gradient-to-r ${ACCENT_GRADIENT} text-white tracking-wide`}>
-                {quote.category}
-              </div>
+          {/* category glow accent */}
+          <div className="h-[1px] mx-2 rounded-full opacity-60"
+               style={{ background: `linear-gradient(to right, transparent, ${accent}, transparent)` }} />
+
+          {/* ── LYRIC CARD ── */}
+          <div className="relative rounded-[20px] overflow-hidden border border-white/8 p-4"
+               style={{
+                 background: `linear-gradient(135deg, rgba(255,255,255,0.04), rgba(255,255,255,0.01))`,
+                 boxShadow: `0 0 30px ${accent}18`,
+               }}>
+
+            {/* progress bar */}
+            {autoOn && (
+              <motion.div key={idx}
+                className="absolute top-0 left-0 h-[2px] rounded-full"
+                style={{ background: accent, opacity: 0.5 }}
+                initial={{ width: '0%' }}
+                animate={{ width: '100%' }}
+                transition={{ duration: AUTO_INTERVAL / 1000, ease: 'linear' }} />
             )}
 
-            <div className="absolute -top-8 left-1/2 -translate-x-1/2 w-36 h-36 bg-[#F59E0B]/10 blur-3xl rounded-full z-[-1] animate-pulse" />
+            {/* genre pill */}
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-[0.1em]"
+                    style={{ background: `${accent}20`, color: accent }}>
+                {cl(lyric?.genre || lyric?.category)}
+              </span>
+              <span className="text-[9px] text-white/25 tabular-nums">{idx + 1}/{lyrics.length}</span>
+            </div>
 
+            {/* lyric text */}
             <AnimatePresence mode="wait">
-              <motion.div
-                key={quote.id}
-                initial={{ opacity: 0, y: 18 }}
+              <motion.div key={lyric?.id ?? idx}
+                initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -18 }}
-                transition={{ duration: 0.55 }}
-                className="mt-3"
-              >
-                <p className="text-gray-200 text-[15px] leading-relaxed text-center font-medium tracking-tight">
-                  "{quote.text}"
+                exit={{ opacity: 0, y: -8 }}
+                transition={{ duration: 0.25 }}>
+
+                <div className="text-[26px] leading-none font-serif mb-1.5 select-none"
+                     style={{ color: `${accent}35` }}>&ldquo;</div>
+
+                <p className="text-[12px] font-medium leading-[1.7] text-white/85 mb-2.5">
+                  {lyric?.text}
                 </p>
-                <p className="text-[11px] mt-3 text-center font-semibold tracking-[0.1em] uppercase text-[#F59E0B]">
-                  — {quote.author}
+
+                <p className="text-[9px] font-bold uppercase tracking-[0.14em]"
+                   style={{ color: accent }}>
+                  — {lyric?.artist || lyric?.author}
                 </p>
               </motion.div>
             </AnimatePresence>
 
-            {/* Prev/Next arrows */}
-            <div className="absolute bottom-2.5 left-0 right-0 flex justify-between px-4">
-              <motion.button
-                onClick={handlePrevQuote}
-                whileHover={{ scale: 1.12 }}
-                whileTap={{ scale: 0.9 }}
-                className="w-8 h-8 bg-[#1C2135] border border-white/20 rounded-full flex items-center justify-center shadow-md hover:bg-[#2a3045] text-[#F59E0B]"
-              >
-                <FiChevronLeft size={15} />
-              </motion.button>
-              <motion.button
-                onClick={handleNextQuote}
-                whileHover={{ scale: 1.12 }}
-                whileTap={{ scale: 0.9 }}
-                className="w-8 h-8 bg-[#1C2135] border border-white/20 rounded-full flex items-center justify-center shadow-md hover:bg-[#2a3045] text-[#F59E0B]"
-              >
-                <FiChevronLeft className="rotate-180" size={15} />
-              </motion.button>
-            </div>
-          </motion.div>
-        </div>
+            {/* controls */}
+            <div className="flex items-center justify-between mt-3 pt-2.5 border-t border-white/6">
+              <div className="flex gap-1">
+                {[-1, 1].map((d, i) => (
+                  <motion.button key={i} whileTap={{ scale: 0.8 }} onClick={() => bump(d)}
+                    className="w-7 h-7 rounded-xl flex items-center justify-center border border-white/8 bg-white/5 hover:bg-white/10 text-white/40 hover:text-white/70 transition-all">
+                    {d < 0 ? <FiChevronLeft size={12} /> : <FiChevronRight size={12} />}
+                  </motion.button>
+                ))}
+              </div>
 
-        {/* Bottom nav */}
-        <motion.div
-          className="absolute bottom-6 left-0 right-0 px-6 z-20"
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.6, duration: 0.5 }}
-        >
-          <div className="flex justify-between items-center w-full max-w-[90%] mx-auto gap-3">
+              {/* dot nav */}
+              <div className="flex items-center gap-[4px]">
+                {lyrics.slice(0, Math.min(lyrics.length, 5)).map((_, i) => (
+                  <motion.button key={i} onClick={() => { setIdx(i); pauseWithResume(); }}
+                    animate={i === idx ? { width: 12 } : { width: 4 }}
+                    className="h-[4px] rounded-full transition-colors"
+                    style={{ background: i === idx ? accent : 'rgba(255,255,255,0.2)' }} />
+                ))}
+              </div>
+
+              <div className="flex gap-1">
+                <motion.button whileTap={{ scale: 0.8 }} onClick={handleCopy}
+                  className="w-7 h-7 rounded-xl flex items-center justify-center border border-white/8 bg-white/5 hover:bg-white/10 text-white/40 hover:text-white/70 transition-all">
+                  <FiCopy size={11} />
+                </motion.button>
+                <motion.button whileTap={{ scale: 0.8 }} onClick={handleShare}
+                  className="w-7 h-7 rounded-xl flex items-center justify-center border border-white/8 bg-white/5 hover:bg-white/10 text-white/40 hover:text-white/70 transition-all">
+                  <FiShare2 size={11} />
+                </motion.button>
+              </div>
+            </div>
+          </div>
+
+          {/* ── CTA BUTTONS ── */}
+          <div className="flex gap-2 mt-1">
+            {/* Contact CTA — always visible */}
             <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              className="relative w-12 h-12 rounded-2xl overflow-hidden backdrop-blur-lg border border-white/30 bg-white/10 hover:bg-white/20 transition-all shadow-lg flex items-center justify-center text-[#F59E0B]"
+              whileTap={{ scale: 0.92 }} whileHover={{ scale: 1.02 }}
+              onClick={onContactOpen}
+              className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-2xl text-[10px] font-semibold border border-white/10 bg-white/5 hover:bg-white/10 text-white/55 hover:text-white transition-all"
             >
-              <div className="absolute inset-0 bg-gradient-to-br from-white/5 via-transparent to-white/5" />
-              <FiPhone className="w-5 h-5" />
+              <FiMail size={11} />Contact
             </motion.button>
-            <motion.button
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-              className="relative flex-1 h-12 rounded-2xl overflow-hidden backdrop-blur-lg border border-white/30 bg-gradient-to-r from-[#F59E0B]/30 to-[#F97316]/40 hover:from-[#F59E0B]/40 hover:to-[#F97316]/50 transition-all shadow-lg flex items-center justify-center"
-            >
-              <div className="absolute inset-0 bg-gradient-to-br from-white/5 via-transparent to-white/5" />
-              <span className={`text-lg font-semibold tracking-widest bg-gradient-to-r ${ACCENT_GRADIENT} bg-clip-text text-transparent drop-shadow-lg`}>
-                Damuchi
-              </span>
+
+            {/* Add Lyric — ADMIN ONLY */}
+            {isAdmin && (
+              <motion.button
+                whileTap={{ scale: 0.92 }} whileHover={{ scale: 1.02 }}
+                onClick={onAddLyric}
+                className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-2xl text-[10px] font-bold text-[#0A0E1A] transition-all"
+                style={{ background: `linear-gradient(to right, #F59E0B, #F97316)` }}
+              >
+                <FiPlus size={11} />Add Lyric
+              </motion.button>
+            )}
+          </div>
+
+          {/* app grid */}
+          <div className="grid grid-cols-4 gap-1 mt-1">
+            {apps.map((app) => (
+              <AppIcon key={app.label} {...app} />
+            ))}
+          </div>
+
+          {/* bottom bar */}
+          <div className="flex items-center justify-center gap-6 mt-1 px-2">
+            <motion.button whileTap={{ scale: 0.8 }} onClick={() => navigate('/quotes')}
+              className="w-8 h-8 rounded-xl flex items-center justify-center bg-white/5 hover:bg-white/10 border border-white/8 text-white/35 hover:text-white/65 transition-all">
+              <FiCamera size={13} />
             </motion.button>
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              className="relative w-12 h-12 rounded-2xl overflow-hidden backdrop-blur-lg border border-white/30 bg-white/10 hover:bg-white/20 transition-all shadow-lg flex items-center justify-center text-[#F59E0B]"
-            >
-              <div className="absolute inset-0 bg-gradient-to-br from-white/5 via-transparent to-white/5" />
-              <FiMail className="w-5 h-5" />
+            <motion.button whileTap={{ scale: 0.9 }} onClick={() => navigate('/')}
+              className="w-12 h-12 rounded-[14px] flex items-center justify-center font-black text-[16px] shadow-lg"
+              style={{ background: `linear-gradient(135deg, #F59E0B, #F97316)`, color: '#0A0E1A' }}>
+              D
+            </motion.button>
+            <motion.button whileTap={{ scale: 0.8 }} onClick={() => navigate('/quotes')}
+              className="w-8 h-8 rounded-xl flex items-center justify-center bg-white/5 hover:bg-white/10 border border-white/8 text-white/35 hover:text-white/65 transition-all">
+              <FiSearch size={13} />
             </motion.button>
           </div>
-        </motion.div>
-      </div>
 
-      <style>{`
-        @keyframes floatGlow {
-          0%, 100% { transform: translateY(0px) scale(1); opacity: 0.2; }
-          50% { transform: translateY(-20px) scale(1.2); opacity: 0.6; }
-        }
-      `}</style>
+          {/* home indicator */}
+          <div className="flex justify-center mt-1">
+            <div className="w-24 h-1 rounded-full bg-white/20" />
+          </div>
+        </div>
+      </div>
+    </motion.div>
+  );
+};
+
+/* ── Standalone page wrapper ────────────────────────────────── */
+export const DailyCardPage = () => {
+  const [contactOpen, setContactOpen] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
+  return (
+    <div className="min-h-screen flex items-center justify-center p-8"
+         style={{ background: '#0A0E1A' }}>
+      <DailyCard onContactOpen={() => setContactOpen(true)} onAddLyric={() => setAddOpen(true)} />
+      {/* Import ContactModal and LyricModal here if needed */}
     </div>
   );
 };

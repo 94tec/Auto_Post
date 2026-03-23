@@ -1,102 +1,104 @@
-import { createContext, useContext, useEffect, useState, useMemo } from "react";
-import { auth } from "../config/firebase";
-import { onAuthStateChanged, signOut } from "firebase/auth";
-import { useNavigate } from "react-router-dom";
-import { toast } from "react-hot-toast";
+// context/AuthContext.jsx — REPLACE your existing version with this entirely
+//
+// Syncs Firebase Auth → both React state AND Redux store simultaneously.
+// • React state  → useAuth() works immediately, no Redux dependency
+// • Redux store  → useRole() / RoleGuard read role from Firestore via Redux
+// • Backward compatible: useAuth() still returns { user, loading, logout, setUser }
 
-// Create context with TypeScript-ready interface
-export const AuthContext = createContext({
-  user: null,
-  loading: true,
-  isAuthenticated: false,
-  logout: async () => {},
-  setUser: () => {},
-  checkAuth: () => false,
-});
+import { createContext, useContext, useEffect, useState } from 'react';
+import { onAuthStateChanged, signOut } from 'firebase/auth';
+import { useDispatch, useSelector }  from 'react-redux';
+import { auth }         from '../config/firebase';
+import {
+  setUser    as reduxSetUser,
+  setLoading as reduxSetLoading,
+  fetchUserRole,
+  selectRole,
+  selectEmailVerified,
+  selectAdminApproved,
+  selectStatus,
+  selectMustChangePassword
+} from '../store/authSlice';
 
-// Provider wrapper
+const AuthContext = createContext();
+
 export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const navigate = useNavigate();
+  const dispatch = useDispatch();
 
-  // Check if user is authenticated
-  const isAuthenticated = useMemo(() => !!user, [user]);
+  // Read enriched profile fields from Redux (populated by fetchUserRole from RTDB)
+  const reduxRole          = useSelector(selectRole);
+  const reduxEmailVerified = useSelector(selectEmailVerified);
+  const reduxAdminApproved = useSelector(selectAdminApproved);
+  const reduxStatus        = useSelector(selectStatus);
+  const reduxMustChangePassword = useSelector(selectMustChangePassword);
 
-  // Handle user logout
-  const logout = async () => {
-    try {
-      await signOut(auth);
-      setUser(null);
-      toast.success("Logged out successfully");
-      navigate("/login");
-    } catch (error) {
-      toast.error("Logout failed");
-      console.error("Logout error:", error);
-    }
-  };
-
-  // Check if user has specific role/claim
-  const checkAuth = (requiredClaims = []) => {
-    if (!user) return false;
-    if (requiredClaims.length === 0) return true;
-    
-    // Implement your custom claim checking logic here
-    // For example, if using Firebase custom claims:
-    // return requiredClaims.some(claim => user.claims?.[claim]);
-    
-    return false;
-  };
+  const [baseUser, setBaseUser] = useState(null); // raw Firebase Auth fields
+  const [loading,  setLoading]  = useState(true);
+  const [roleFetched, setRoleFetched] = useState(false);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      try {
-        if (firebaseUser) {
-          // You could add additional user data fetching here
-          // For example:
-          // const tokenResult = await firebaseUser.getIdTokenResult();
-          // const userWithClaims = {
-          //   ...firebaseUser,
-          //   claims: tokenResult.claims
-          // };
-          setUser(firebaseUser);
-        } else {
-          setUser(null);
-        }
-      } catch (error) {
-        console.error("Auth state error:", error);
-        setUser(null);
-      } finally {
+    dispatch(reduxSetLoading(true));
+
+    const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (firebaseUser) {
+        const safe = {
+          uid:         firebaseUser.uid,
+          email:       firebaseUser.email,
+          displayName: firebaseUser.displayName,
+          photoURL:    firebaseUser.photoURL,
+        };
+        setBaseUser(safe);
+        dispatch(reduxSetUser(safe));
+        await dispatch(fetchUserRole(firebaseUser.uid));
+        setRoleFetched(true); 
+      } else {
+        setBaseUser(null);
+        setRoleFetched(false);
         setLoading(false);
+        dispatch(reduxSetUser(null));
       }
     });
 
-    return unsubscribe;
-  }, []);
+    return unsub;
+  }, [dispatch]);
 
-  // Memoized context value to prevent unnecessary re-renders
-  const value = useMemo(() => ({
-    user,
-    loading,
-    isAuthenticated,
-    setUser,
-    logout,
-    checkAuth,
-  }), [user, loading, isAuthenticated]);
+  const logout = async () => {
+    await signOut(auth);
+    setBaseUser(null);
+    setRoleFetched(false);
+    dispatch(reduxSetUser(null));
+  };
+
+  // Merge DB profile into user so every consumer gets:
+  // user.role, user.emailVerified, user.adminApproved, user.status
+  const user = baseUser
+    ? {
+        ...baseUser,
+        role:          reduxRole,
+        emailVerified: reduxEmailVerified,
+        adminApproved: reduxAdminApproved,
+        status:        reduxStatus,
+        mustChangePassword: reduxMustChangePassword,
+      }
+    : null;
+
+  const roleReady = roleFetched;
 
   return (
-    <AuthContext.Provider value={value}>
-      {/* Only render children when auth state is determined */}
-      {!loading && children}
+    <AuthContext.Provider value={{
+      user, loading, logout,
+      setUser: setBaseUser,
+      roleReady,
+    }}>
+      {children}
     </AuthContext.Provider>
   );
 };
 
-// Custom hook with additional safety checks
-export const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error("useAuth must be used within an AuthProvider");
-  }
-  return context;
-};
+// Named export for the rare cases that need the context object directly
+export { AuthContext };
+
+// Hook — preferred way to consume auth anywhere
+export const useAuth = () => useContext(AuthContext);
+
+export default AuthContext;

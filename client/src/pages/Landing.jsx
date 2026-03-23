@@ -1,844 +1,642 @@
-import { useEffect, useState, useContext, useRef, useCallback, useMemo } from 'react';
+// Landing.jsx — authenticated users only, 5 chained sections
+// AUTH GATE: unauthenticated / unapproved → /guest
+// Sections: #hero  #features  #how  #stats  #contact
+// Navbar tracks active section via IntersectionObserver
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { get, ref } from 'firebase/database';
-import { db } from '../config/firebase';
-import { AuthContext } from '../context/AuthContext';
-import { ThemeContext } from '../context/ThemeContext';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-hot-toast';
-import LoadingSpinner from '../components/LoadingSpinner';
+
+import Navbar        from '../components/Navbar';
+import DailyCard     from '../components/DailyCard';
+import QuoteFeature  from '../components/QuoteFeature';
+import NewQuoteModal from './QuoteModal';
+import ContactModal  from '../components/ContactModal';
+import AddLyricModal from '../components/AddLyricalModal';
+import RoleGuard     from '../components/RoleGuard';
+import useRole       from '../hooks/useRole';
+import { useAuth }   from '../context/AuthContext';
+import { ROLES }     from '../store/authSlice';
+import { quotesApi } from '../utils/api';
+
 import {
-  FiSun, FiMoon, FiRefreshCw, FiLogIn, FiLogOut,
-  FiUser, FiMenu, FiX, FiChevronLeft, FiPhone, FiMail,
-  FiZap, FiBookOpen, FiBriefcase, FiStar, FiArrowRight,
-  FiCopy, FiShare2, FiPause, FiPlay, FiHome, FiGrid,
+  FiPause, FiPlay, FiArrowRight, FiGrid, FiPlus, FiMail,
+  FiLogIn, FiShield, FiBookOpen, FiEye, FiZap, FiStar,
+  FiUsers, FiTrendingUp, FiLock, FiGlobe, FiTwitter,
+  FiLinkedin, FiCheckCircle, FiClock, FiActivity, FiChevronDown,
 } from 'react-icons/fi';
 
-/* -------------------- CONSTANTS (Accent colors) -------------------- */
-const ACCENT_GRADIENT = 'from-[#F59E0B] to-[#F97316]'; // burnished amber‑gold
-const NAVY = '#0A0E1A';
-const SLATE = '#1C2135';
+const ACCENT  = '#F59E0B';
+const ACCENT2 = '#F97316';
+const NAVY    = '#0A0E1A';
+const SLATE   = '#141924';
+const MID     = '#0D1220';
 
-const LOCAL_QUOTES = [
-  { id:'q1',  text:'Stay hard.', author:'David Goggins', category:'motivation' },
-  { id:'q2',  text:'You are in danger of living a life so comfortable and soft, that you will die without ever realizing your true potential.', author:'David Goggins', category:'motivation' },
-  { id:'q3',  text:'The only thing more contagious than a good attitude is a bad one.', author:'David Goggins', category:'mindset' },
-  { id:'q4',  text:'Suffering is a test. That\'s all it is. Suffering is the true test of life.', author:'David Goggins', category:'resilience' },
-  { id:'q5',  text:'Arrogance is the enemy of growth.', author:'Andrew Tate', category:'growth' },
-  { id:'q6',  text:'Discipline is the root of all good qualities.', author:'Andrew Tate', category:'discipline' },
-  { id:'q7',  text:'Success is always stressful.', author:'Andrew Tate', category:'success' },
-  { id:'q8',  text:'Your mind is your most powerful muscle. Train it well.', author:'Ed Mylett', category:'mindset' },
-  { id:'q9',  text:'One more try is always worth it.', author:'Ed Mylett', category:'persistence' },
-  { id:'q10', text:"You don't get what you want, you get what you are.", author:'Ed Mylett', category:'mindset' },
-  { id:'q11', text:'The only way to achieve the impossible is to believe it is possible.', author:'Ben Nemtin', category:'belief' },
-  { id:'q12', text:"Don't let your dreams be dreams.", author:'Ben Nemtin', category:'motivation' },
-  { id:'q13', text:"You miss 100% of the shots you don't take.", author:'Ben Nemtin', category:'action' },
-  { id:'q14', text:'Every day is a chance to get better.', author:'Michael Oher', category:'growth' },
-  { id:'q15', text:"Don't ever let someone tell you that you can't do something.", author:'Michael Oher', category:'determination' },
-  { id:'q16', text:'Success is not owned, it is leased. And rent is due every day.', author:'Ryan Harris', category:'success' },
-  { id:'q17', text:'Champions behave like champions before they are champions.', author:'Ryan Harris', category:'motivation' },
-];
+const CAT_COLOR = {
+  motivation:'#F59E0B', mindset:'#818CF8', discipline:'#34D399',
+  success:'#A78BFA', resilience:'#FB923C', persistence:'#38BDF8',
+  growth:'#2DD4BF', inspiration:'#7DD3FC',
+};
+const catColor = (c) => CAT_COLOR[c] ?? '#6B7280';
 
-const CAT_COLORS = {
-  motivation:    'from-yellow-500 to-orange-500',
-  mindset:       'from-blue-400 to-indigo-600',
-  discipline:    'from-green-500 to-emerald-600',
-  success:       'from-purple-500 to-pink-600',
-  resilience:    'from-red-500 to-amber-600',
-  persistence:   'from-cyan-400 to-blue-600',
-  belief:        'from-violet-500 to-purple-600',
-  action:        'from-lime-400 to-green-600',
-  growth:        'from-teal-400 to-cyan-600',
-  determination: 'from-rose-500 to-red-600',
-  inspiration:   'from-sky-400 to-blue-500',
-  default:       'from-gray-400 to-gray-600',
+/* ── useCountUp ─────────────────────────────────────────────── */
+const useCountUp = (target, duration = 1600, active = false) => {
+  const [val, setVal] = useState(0);
+  useEffect(() => {
+    if (!active || !target) return;
+    let t0 = null;
+    const frame = (ts) => {
+      if (!t0) t0 = ts;
+      const p = Math.min((ts - t0) / duration, 1);
+      setVal(Math.floor((1 - Math.pow(1 - p, 3)) * target));
+      if (p < 1) requestAnimationFrame(frame);
+    };
+    requestAnimationFrame(frame);
+  }, [target, duration, active]);
+  return val;
 };
 
-/* -------------------- SECTION 1: NAVBAR (30% slate) -------------------- */
-const Navbar = () => {
-  const { theme, toggleTheme } = useContext(ThemeContext);
-  const { user, logout } = useContext(AuthContext);
-  const navigate = useNavigate();
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [scrolled, setScrolled] = useState(false);
-  const dark = theme === 'dark';
-
-  useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 24);
-    window.addEventListener('scroll', onScroll, { passive: true });
-    return () => window.removeEventListener('scroll', onScroll);
-  }, []);
-
-  const links = [
-    { label: 'Home',      to: '/',            icon: FiHome,     section: true },
-    { label: 'Quotes',    to: '/#quotes',     icon: FiBookOpen, section: true },
-    { label: 'Features',  to: '/#features',   icon: FiGrid,     section: true },
-    { label: 'Contact',   to: '/#contact',    icon: FiMail,     section: true },
-  ];
-
-  const handleNavClick = (e, to) => {
-    e.preventDefault();
-    if (to.startsWith('/#')) {
-      const id = to.substring(2);
-      const el = document.getElementById(id);
-      if (el) {
-        el.scrollIntoView({ behavior: 'smooth' });
-        navigate('/', { replace: true });
-      }
-    } else {
-      navigate(to);
-    }
-    setMenuOpen(false);
-  };
-
-  const handleLogout = async () => {
-    await logout();
-    setMenuOpen(false);
-  };
-
+/* ── AnimatedStat ───────────────────────────────────────────── */
+const AnimatedStat = ({ value, suffix = '', label, icon: Icon, color, inView }) => {
+  const n = useCountUp(typeof value === 'number' ? value : 0, 1500, inView);
   return (
-    <motion.nav
-      initial={{ y: -72, opacity: 0 }}
-      animate={{ y: 0, opacity: 1 }}
-      transition={{ duration: 0.55, ease: [0.25, 0.46, 0.45, 0.94] }}
-      className={`fixed top-0 inset-x-0 z-50 transition-all duration-300 ${
-        scrolled
-          ? 'bg-[#1C2135]/90 backdrop-blur-2xl border-b border-white/[0.06] shadow-[0_8px_32px_rgba(0,0,0,0.4)]'
-          : 'bg-transparent'
-      }`}
-      style={{ backgroundColor: scrolled ? `${SLATE}E6` : 'transparent' }}
-    >
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
-        {/* Logo */}
-        <Link
-          to="/"
-          onClick={() => setMenuOpen(false)}
-          className="flex items-center gap-2.5 shrink-0"
-        >
-          <div className={`w-8 h-8 rounded-[10px] flex items-center justify-center text-white font-black text-sm shadow-lg bg-gradient-to-r ${ACCENT_GRADIENT}`}>
-            D
-          </div>
-          <span className="font-extrabold text-[17px] tracking-tight leading-none text-white">
-            Damu<span className="text-[#F59E0B]">chi</span>
-          </span>
-        </Link>
-
-        {/* Desktop nav */}
-        <div className="hidden md:flex items-center gap-0.5">
-          {links.map(({ label, to, icon: Icon }) => (
-            <Link
-              key={label}
-              to={to}
-              onClick={(e) => handleNavClick(e, to)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[13px] font-medium transition-colors text-gray-400 hover:text-white hover:bg-white/8"
-            >
-              <Icon size={13} />
-              {label}
-            </Link>
-          ))}
-        </div>
-
-        {/* Right controls */}
-        <div className="flex items-center gap-2">
-          {/* Theme toggle */}
-          <motion.button
-            whileHover={{ scale: 1.08, rotate: 15 }}
-            whileTap={{ scale: 0.92 }}
-            onClick={toggleTheme}
-            aria-label="Toggle theme"
-            className="w-9 h-9 rounded-xl flex items-center justify-center transition-colors bg-white/8 hover:bg-white/15 text-[#F59E0B]"
-          >
-            {dark ? <FiSun size={15} /> : <FiMoon size={15} />}
-          </motion.button>
-
-          {/* Auth block */}
-          {user ? (
-            <div className="flex items-center gap-2">
-              <motion.button
-                whileHover={{ scale: 1.02 }}
-                onClick={() => navigate('/dashboard')}
-                className="hidden sm:flex items-center gap-2 pl-1.5 pr-3 py-1 rounded-xl text-[13px] font-medium transition-all bg-white/8 hover:bg-white/15 text-white border border-white/10"
-              >
-                <div className={`w-6 h-6 rounded-lg flex items-center justify-center text-white text-[11px] font-black shrink-0 bg-gradient-to-r ${ACCENT_GRADIENT}`}>
-                  {user.displayName
-                    ? user.displayName[0].toUpperCase()
-                    : user.email
-                      ? user.email[0].toUpperCase()
-                      : <FiUser size={10} />}
-                </div>
-                <span className="max-w-[110px] truncate">
-                  {user.displayName || user.email?.split('@')[0]}
-                </span>
-              </motion.button>
-
-              <motion.button
-                whileHover={{ scale: 1.04 }}
-                whileTap={{ scale: 0.96 }}
-                onClick={handleLogout}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[13px] font-semibold transition-all bg-red-500/15 hover:bg-red-500/25 text-red-400 border border-red-500/25"
-              >
-                <FiLogOut size={13} />
-                <span className="hidden sm:inline">Sign out</span>
-              </motion.button>
-            </div>
-          ) : (
-            <motion.button
-              whileHover={{ scale: 1.04 }}
-              whileTap={{ scale: 0.96 }}
-              onClick={() => navigate('/auth/login')}
-              className={`flex items-center gap-1.5 px-4 py-1.5 rounded-xl text-[13px] font-semibold shadow-md transition-all bg-gradient-to-r ${ACCENT_GRADIENT} text-gray-950`}
-            >
-              <FiLogIn size={13} />
-              Sign in
-            </motion.button>
-          )}
-
-          {/* Mobile menu button */}
-          <button
-            onClick={() => setMenuOpen(o => !o)}
-            className="md:hidden w-9 h-9 rounded-xl flex items-center justify-center transition-colors text-white hover:bg-white/10"
-            aria-label="Menu"
-          >
-            {menuOpen ? <FiX size={17} /> : <FiMenu size={17} />}
-          </button>
-        </div>
+    <motion.div initial={{ opacity: 0, y: 18 }} whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true }} transition={{ duration: 0.4 }}
+      className="flex flex-col gap-3 p-5 rounded-2xl border border-white/8" style={{ background: SLATE }}>
+      <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: `${color}18` }}>
+        <Icon size={16} style={{ color }} />
       </div>
-
-      {/* Mobile dropdown */}
-      <AnimatePresence>
-        {menuOpen && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.22 }}
-            className="md:hidden overflow-hidden border-t bg-[#1C2135]/95 border-white/8 backdrop-blur-2xl"
-          >
-            <div className="px-4 py-3 space-y-0.5">
-              {links.map(({ label, to, icon: Icon }) => (
-                <Link
-                  key={label}
-                  to={to}
-                  onClick={(e) => handleNavClick(e, to)}
-                  className="flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors text-gray-300 hover:bg-white/8 hover:text-white"
-                >
-                  <Icon size={14} />
-                  {label}
-                </Link>
-              ))}
-              {/* Mobile auth */}
-              <div className="pt-2 border-t mt-2 border-white/8">
-                {user ? (
-                  <button
-                    onClick={handleLogout}
-                    className="w-full flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm font-medium text-red-400 hover:bg-red-500/15 transition-colors"
-                  >
-                    <FiLogOut size={14} />
-                    Sign out ({user.displayName || user.email?.split('@')[0]})
-                  </button>
-                ) : (
-                  <button
-                    onClick={() => { navigate('/auth/login'); setMenuOpen(false); }}
-                    className="w-full flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm font-semibold transition-colors text-[#F59E0B] hover:bg-amber-500/10"
-                  >
-                    <FiLogIn size={14} />
-                    Sign in
-                  </button>
-                )}
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </motion.nav>
-  );
-};
-
-/* -------------------- SECTION 2: HERO CARD (phone mockup) -------------------- */
-const HeroCard = ({ quotes = [], externalIndex, onIndexChange }) => {
-  const allQuotes = quotes.length ? quotes : LOCAL_QUOTES;
-  const [month, setMonth] = useState('');
-  const [dayWithSuffix, setDayWithSuffix] = useState('');
-  const [internalIdx, setInternalIdx] = useState(0);
-  const [isAutoRotating, setIsAutoRotating] = useState(true);
-  const intervalRef = useRef(null);
-
-  const setIdx = useCallback((val) => {
-    const next = typeof val === 'function' ? val(externalIndex ?? internalIdx) : val;
-    if (externalIndex !== undefined) onIndexChange?.(next);
-    else setInternalIdx(next);
-  }, [externalIndex, internalIdx, onIndexChange]);
-
-  const bump = useCallback((dir) => {
-    setIdx(p => (p + dir + allQuotes.length) % allQuotes.length);
-    setIsAutoRotating(false);
-    setTimeout(() => setIsAutoRotating(true), 30000);
-  }, [allQuotes.length, setIdx]);
-
-  useEffect(() => {
-    if (isAutoRotating) {
-      intervalRef.current = setInterval(() => setIdx(p => (p + 1) % allQuotes.length), 10000);
-    } else {
-      clearInterval(intervalRef.current);
-    }
-    return () => clearInterval(intervalRef.current);
-  }, [isAutoRotating, allQuotes.length, setIdx]);
-
-  useEffect(() => {
-    const d = new Date();
-    const m = new Intl.DateTimeFormat('en-US', { month: 'long' }).format(d);
-    const day = d.getDate();
-    const s = [1,21,31].includes(day) ? 'st' : [2,22].includes(day) ? 'nd' : [3,23].includes(day) ? 'rd' : 'th';
-    setMonth(m);
-    setDayWithSuffix(`${day}${s}`);
-  }, []);
-
-  const idx = externalIndex !== undefined ? externalIndex : internalIdx;
-  const quote = allQuotes[idx] || allQuotes[0];
-  const catColor = CAT_COLORS[quote?.category] || CAT_COLORS.default;
-
-  return (
-    <div className="relative w-[340px] sm:w-[360px] h-[600px] sm:h-[640px] shrink-0
-      bg-[linear-gradient(180deg,_#0A0E1A_0%,_#050505_25%,_#1a1a1a_50%,_#0A0E1A_95%,_#050505_100%)]
-      rounded-[36px] shadow-[0_30px_60px_rgba(0,0,0,0.8)] overflow-hidden
-      border border-gray-700/50 font-sans mx-auto">
-
-      {/* Screen glare */}
-      <div className="absolute inset-0 pointer-events-none z-0">
-        <div className="absolute top-0 right-0 w-1/2 h-1/3 bg-gradient-to-br from-white/5 to-transparent rounded-full blur-xl" />
-      </div>
-
-      {/* Notch */}
-      <div className="absolute top-4 left-1/2 -translate-x-1/2 w-[130px] h-[30px] bg-black/90 rounded-full z-10 border border-gray-700/50" />
-
-      {/* Top icon buttons */}
-      <div className="absolute top-3 left-3 z-20">
-        <motion.button
-          whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
-          onClick={() => bump(-1)}
-          className="w-8 h-8 bg-white/10 border border-white/20 rounded-full flex items-center justify-center text-white/80 backdrop-blur-md shadow-sm hover:text-white transition-colors"
-          aria-label="Previous quote"
-        >
-          <FiChevronLeft size={16} />
-        </motion.button>
-      </div>
-      <div className="absolute top-3 right-3 z-20">
-        <motion.button
-          whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
-          className="w-8 h-8 bg-white/10 border border-white/20 rounded-full flex items-center justify-center text-white/80 backdrop-blur-md shadow-sm hover:text-white transition-colors"
-          aria-label="Menu"
-        >
-          <FiMenu size={16} />
-        </motion.button>
-      </div>
-
-      {/* Status bar */}
-      <div className="absolute top-5 left-0 right-0 px-16 flex justify-between items-center z-10">
-        <span className="text-[11px] text-white/70 font-medium tracking-wider">94tec</span>
-        <div className="flex items-center gap-1">
-          {[...Array(3)].map((_,i) => (
-            <div key={i} className="w-2.5 h-2.5 rounded-full border border-white/30 bg-white/10 backdrop-blur-sm" />
-          ))}
-        </div>
-      </div>
-
-      {/* Date section */}
-      <motion.div
-        initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.3, duration: 0.6 }}
-        className="absolute top-20 left-0 right-0 px-4 pointer-events-none z-10"
-      >
-        <div className="relative w-full max-w-[95%] mx-auto px-4 py-6 flex flex-col items-center justify-center overflow-hidden">
-          {/* Animated ring */}
-          <motion.div
-            animate={{ rotate: 360 }}
-            transition={{ duration: 20, repeat: Infinity, ease: 'linear' }}
-            className="absolute inset-0 rounded-full border-[6px] border-transparent border-t-white/10 border-r-white/5"
-          />
-          <div className="absolute -top-6 left-1/2 -translate-x-1/2 w-24 h-24 bg-[#F59E0B]/20 rounded-full blur-3xl animate-ping z-[-1]" />
-          <div className="absolute -top-6 left-1/2 -translate-x-1/2 w-16 h-16 bg-[#F97316]/15 rounded-full blur-2xl z-[-1]" />
-          {/* Particles */}
-          {[...Array(8)].map((_,i) => (
-            <div key={i} className="absolute bg-white/20 rounded-full pointer-events-none"
-              style={{
-                width: `${Math.random()*4+2}px`, height: `${Math.random()*4+2}px`,
-                top: `${Math.random()*100}%`, left: `${Math.random()*100}%`,
-                animation: `floatGlow ${Math.random()*12+8}s ease-in-out infinite`,
-                opacity: Math.random()*0.3+0.1,
-              }}
-            />
-          ))}
-          <motion.h1
-            whileHover={{ scale: 1.05 }}
-            className="text-xl tracking-widest uppercase select-none bg-gradient-to-r from-[#F59E0B] via-[#F97316] to-[#F59E0B] bg-clip-text text-transparent drop-shadow-md"
-          >
-            {month}
-          </motion.h1>
-          <motion.h2
-            whileHover={{ scale: 1.08 }}
-            className="text-5xl font-bold tracking-tight leading-none mt-1 drop-shadow-xl select-none bg-gradient-to-br from-[#F59E0B] via-[#F97316] to-[#F59E0B] bg-clip-text text-transparent"
-          >
-            {dayWithSuffix}
-          </motion.h2>
-        </div>
-      </motion.div>
-
-      {/* Quote card */}
-      <div className="absolute top-[250px] left-0 right-0 px-4 z-20">
-        <motion.div
-          initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.4, duration: 0.5 }}
-          className="w-full max-w-[97%] mx-auto px-5 py-6 rounded-3xl relative overflow-hidden"
-          style={{
-            background: '#1C2135',
-            boxShadow: '0 4px 30px rgba(0,0,0,0.5)',
-            backdropFilter: 'blur(2px)',
-            WebkitBackdropFilter: 'blur(2px)',
-            border: '1px solid rgba(255,255,255,0.1)',
-          }}
-        >
-          {quote?.category && (
-            <div className={`absolute top-2 right-2.5 text-[10px] font-bold px-2 py-0.5 rounded-full bg-gradient-to-r ${catColor} text-white tracking-wide`}>
-              {quote.category}
-            </div>
-          )}
-
-          <div className="absolute -top-8 left-1/2 -translate-x-1/2 w-36 h-36 bg-[#F59E0B]/10 blur-3xl rounded-full z-[-1] animate-pulse" />
-
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={quote?.id}
-              initial={{ opacity: 0, y: 18 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -18 }}
-              transition={{ duration: 0.55 }}
-              className="mt-3"
-            >
-              <p className="text-gray-200 text-[15px] leading-relaxed text-center font-medium tracking-tight">
-                "{quote?.text}"
-              </p>
-              <p className="text-[11px] mt-3 text-center font-semibold tracking-[0.1em] uppercase text-[#F59E0B]">
-                — {quote?.author}
-              </p>
-            </motion.div>
-          </AnimatePresence>
-
-          {/* Prev/Next arrows */}
-          <div className="absolute bottom-2.5 left-0 right-0 flex justify-between px-4">
-            <motion.button
-              onClick={() => bump(-1)}
-              whileHover={{ scale: 1.12 }} whileTap={{ scale: 0.9 }}
-              className="w-8 h-8 bg-[#1C2135] border border-white/20 rounded-full flex items-center justify-center shadow-md hover:bg-[#2a3045] text-[#F59E0B]"
-              aria-label="Previous quote"
-            >
-              <FiChevronLeft size={15} />
-            </motion.button>
-            <motion.button
-              onClick={() => bump(1)}
-              whileHover={{ scale: 1.12 }} whileTap={{ scale: 0.9 }}
-              className="w-8 h-8 bg-[#1C2135] border border-white/20 rounded-full flex items-center justify-center shadow-md hover:bg-[#2a3045] text-[#F59E0B]"
-              aria-label="Next quote"
-            >
-              <FiChevronLeft className="rotate-180" size={15} />
-            </motion.button>
-          </div>
-        </motion.div>
-      </div>
-
-      {/* Bottom nav */}
-      <motion.div
-        className="absolute bottom-6 left-0 right-0 px-6 z-20"
-        initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.6, duration: 0.5 }}
-      >
-        <div className="flex justify-between items-center w-full max-w-[90%] mx-auto gap-3">
-          <motion.button
-            whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
-            className="relative w-12 h-12 rounded-2xl overflow-hidden backdrop-blur-lg border border-white/30 bg-white/10 hover:bg-white/20 transition-all shadow-lg flex items-center justify-center text-[#F59E0B]"
-          >
-            <div className="absolute inset-0 bg-gradient-to-br from-white/5 via-transparent to-white/5" />
-            <FiPhone className="w-5 h-5" />
-          </motion.button>
-          <motion.button
-            whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
-            className="relative flex-1 h-12 rounded-2xl overflow-hidden backdrop-blur-lg border border-white/30 bg-gradient-to-r from-[#F59E0B]/30 to-[#F97316]/40 hover:from-[#F59E0B]/40 hover:to-[#F97316]/50 transition-all shadow-lg flex items-center justify-center"
-          >
-            <div className="absolute inset-0 bg-gradient-to-br from-white/5 via-transparent to-white/5" />
-            <span className="text-lg font-semibold tracking-widest text-[#F59E0B] drop-shadow-lg">
-              Damuchi
-            </span>
-          </motion.button>
-          <motion.button
-            whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
-            className="relative w-12 h-12 rounded-2xl overflow-hidden backdrop-blur-lg border border-white/30 bg-white/10 hover:bg-white/20 transition-all shadow-lg flex items-center justify-center text-[#F59E0B]"
-          >
-            <div className="absolute inset-0 bg-gradient-to-br from-white/5 via-transparent to-white/5" />
-            <FiMail className="w-5 h-5" />
-          </motion.button>
-        </div>
-      </motion.div>
-    </div>
-  );
-};
-
-/* -------------------- SECTION 3: QUOTE PANEL (live quote) -------------------- */
-const QuotePanel = ({ quote, dark }) => {
-  const catColor = CAT_COLORS[quote?.category] || CAT_COLORS.default;
-
-  const handleCopy = () => {
-    navigator.clipboard.writeText(`"${quote.text}" — ${quote.author}`);
-    toast.success('Copied to clipboard!');
-  };
-
-  const handleShare = async () => {
-    try {
-      await navigator.share({ title: 'Damuchi', text: `"${quote.text}" — ${quote.author}`, url: window.location.href });
-    } catch {
-      handleCopy();
-    }
-  };
-
-  if (!quote) return null;
-
-  return (
-    <AnimatePresence mode="wait">
-      <motion.div
-        key={quote.id}
-        initial={{ opacity: 0, y: 18 }}
-        animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, y: -18 }}
-        transition={{ duration: 0.45 }}
-        className="relative p-5 rounded-2xl border mb-7 bg-[#1C2135] border-white/10 backdrop-blur-sm"
-      >
-        {quote.category && (
-          <span className={`inline-flex mb-3 text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-gradient-to-r ${catColor} text-white tracking-wide uppercase`}>
-            {quote.category}
-          </span>
-        )}
-        <p className="text-lg font-medium italic leading-relaxed mb-3 text-gray-200">
-          "{quote.text}"
+      <div>
+        <p className="text-[32px] font-black text-white leading-none tabular-nums">
+          {typeof value === 'number' ? n : value}{suffix}
         </p>
-        <div className="flex items-center justify-between">
-          <p className="text-sm font-semibold text-[#F59E0B]">
-            — {quote.author}
-          </p>
-          <div className="flex items-center gap-1">
-            <motion.button
-              whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
-              onClick={handleCopy}
-              className="p-1.5 rounded-lg transition-colors hover:bg-white/10 text-gray-400 hover:text-white"
-              aria-label="Copy quote"
-            >
-              <FiCopy size={13} />
-            </motion.button>
-            <motion.button
-              whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
-              onClick={handleShare}
-              className="p-1.5 rounded-lg transition-colors hover:bg-white/10 text-gray-400 hover:text-white"
-              aria-label="Share quote"
-            >
-              <FiShare2 size={13} />
-            </motion.button>
-          </div>
-        </div>
-      </motion.div>
-    </AnimatePresence>
+        <p className="text-[12px] text-white/40 mt-1">{label}</p>
+      </div>
+    </motion.div>
   );
 };
 
-/* -------------------- STAT PILL (small stats) -------------------- */
-const Stat = ({ value, label }) => (
-  <div className="flex flex-col items-center px-5 py-2.5 rounded-xl bg-[#1C2135] border border-white/8">
-    <span className="text-xl font-black text-[#F59E0B]">{value}</span>
-    <span className="text-[11px] font-medium mt-0.5 text-gray-400">{label}</span>
-  </div>
-);
-
-/* -------------------- FEATURE CARD (30% slate) -------------------- */
-const FeatureCard = ({ icon: Icon, title, description, from, to, delay = 0 }) => (
-  <motion.div
-    initial={{ opacity: 0, y: 28 }}
-    whileInView={{ opacity: 1, y: 0 }}
-    viewport={{ once: true }}
-    transition={{ duration: 0.45, delay }}
-    whileHover={{ y: -5, scale: 1.02 }}
-    className="relative p-5 rounded-2xl border overflow-hidden group cursor-default transition-all duration-300 bg-[#1C2135] border-white/8 hover:border-white/15 hover:bg-[#23283d]"
-  >
-    <div className={`w-10 h-10 rounded-xl flex items-center justify-center mb-4 bg-gradient-to-r ${from} ${to} shadow-lg`}>
-      <Icon className="text-white" size={18} />
+/* ── FeatureCard ────────────────────────────────────────────── */
+const FeatureCard = ({ icon: Icon, color, title, desc, badge, delay }) => (
+  <motion.div initial={{ opacity: 0, y: 22 }} whileInView={{ opacity: 1, y: 0 }}
+    viewport={{ once: true }} transition={{ delay, duration: 0.4 }}
+    whileHover={{ y: -4, transition: { duration: 0.2 } }}
+    className="relative p-6 rounded-2xl border border-white/8 overflow-hidden group cursor-default"
+    style={{ background: SLATE }}>
+    <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"
+         style={{ background: `radial-gradient(ellipse at top left, ${color}08 0%, transparent 70%)` }} />
+    {badge && (
+      <span className="absolute top-4 right-4 text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full"
+            style={{ background: `${ACCENT}18`, color: ACCENT }}>{badge}</span>
+    )}
+    <div className="w-10 h-10 rounded-xl flex items-center justify-center mb-5"
+         style={{ background: `${color}18`, border: `1px solid ${color}25` }}>
+      <Icon size={18} style={{ color }} />
     </div>
-    <h3 className="text-[15px] font-bold mb-1 text-white">{title}</h3>
-    <p className="text-[13px] leading-relaxed text-gray-400">{description}</p>
+    <h3 className="text-[15px] font-bold text-white mb-2">{title}</h3>
+    <p className="text-[13px] text-white/45 leading-relaxed">{desc}</p>
   </motion.div>
 );
 
-/* -------------------- FEATURES GRID (container) -------------------- */
-const FeaturesGrid = ({ dark }) => {
-  const features = [
-    { icon: FiZap,       title: 'Instant Inspiration',  description: 'Fresh quotes every 10 s or on demand from a curated Firebase collection.',    from: 'from-yellow-500', to: 'to-orange-500' },
-    { icon: FiBookOpen,  title: 'Curated Wisdom',       description: 'Hand-picked quotes by category — mindset, discipline, growth and more.',       from: 'from-blue-400',   to: 'to-indigo-600' },
-    { icon: FiBriefcase, title: 'Full Dashboard',       description: 'Add, edit, delete and search your own quotes with category filtering.',         from: 'from-purple-500', to: 'to-pink-600'   },
-    { icon: FiStar,      title: 'Save Favourites',      description: 'Bookmark quotes that move you and return to them whenever you need a boost.',   from: 'from-amber-500',  to: 'to-red-500'    },
-  ];
-  return (
-    <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-      {features.map((f, i) => (
-        <FeatureCard key={f.title} {...f} delay={i * 0.1} />
-      ))}
+/* ── StepRow ────────────────────────────────────────────────── */
+const StepRow = ({ num, icon: Icon, color, title, desc, isLast, delay }) => (
+  <motion.div initial={{ opacity: 0, x: -14 }} whileInView={{ opacity: 1, x: 0 }}
+    viewport={{ once: true }} transition={{ delay, duration: 0.4 }}
+    className="flex gap-4 items-start">
+    <div className="flex flex-col items-center">
+      <div className="w-10 h-10 rounded-2xl flex items-center justify-center font-black text-[13px] shrink-0"
+           style={{ background: `${color}18`, border: `1px solid ${color}30`, color }}>{num}</div>
+      {!isLast && <div className="w-px h-full min-h-[36px] mt-1" style={{ background: `${color}20` }} />}
     </div>
-  );
-};
-
-/* -------------------- CONTACT SECTION (30% slate) -------------------- */
-const ContactSection = () => (
-  <section id="contact" className="py-12 border-t border-white/5">
-    <div className="max-w-7xl mx-auto px-4 sm:px-8 lg:px-16">
-      <div className="flex flex-col sm:flex-row items-center justify-between gap-5">
-        <div>
-          <h3 className="text-base font-bold text-white">Get in touch</h3>
-          <p className="text-sm mt-0.5 text-gray-400">
-            Questions, feedback, or collaboration ideas?
-          </p>
-        </div>
-        <div className="flex gap-3">
-          <motion.a
-            href="mailto:hello@damuchi.app"
-            whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium border transition-all border-white/15 bg-white/5 hover:bg-white/10 text-white"
-          >
-            <FiMail size={13} />
-            Email us
-          </motion.a>
-          <motion.a
-            href="tel:+254700000000"
-            whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold shadow-md transition-all bg-gradient-to-r ${ACCENT_GRADIENT} text-gray-950`}
-          >
-            <FiPhone size={13} />
-            Call us
-          </motion.a>
-        </div>
+    <div className="pb-7 flex-1">
+      <div className="flex items-center gap-2 mb-1.5">
+        <Icon size={13} style={{ color }} />
+        <h3 className="text-[14px] font-bold text-white">{title}</h3>
       </div>
+      <p className="text-[13px] text-white/45 leading-relaxed">{desc}</p>
     </div>
-  </section>
+  </motion.div>
 );
 
-/* -------------------- MAIN LANDING (60% navy background) -------------------- */
+/* ── SectionHead ────────────────────────────────────────────── */
+const SectionHead = ({ eyebrow, title, sub, left = false }) => (
+  <div className={`mb-12 ${left ? '' : 'text-center'}`}>
+    <motion.div initial={{ opacity: 0, y: -6 }} whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true }} transition={{ duration: 0.4 }}>
+      <span className="text-[10px] font-bold tracking-[0.22em] uppercase" style={{ color: ACCENT }}>{eyebrow}</span>
+      <h2 className="text-[28px] sm:text-[36px] font-black text-white tracking-tight mt-2 mb-3 leading-[1.08]">{title}</h2>
+      {sub && <p className="text-[14px] text-white/40 leading-relaxed max-w-xl mx-auto">{sub}</p>}
+    </motion.div>
+  </div>
+);
+
+const Hr = () => (
+  <div className="max-w-7xl mx-auto px-4">
+    <div className="h-px" style={{ background: 'linear-gradient(to right,transparent,rgba(255,255,255,0.08),transparent)' }} />
+  </div>
+);
+
+/* ════════════════════════════════════════════════════════════
+   MAIN
+════════════════════════════════════════════════════════════ */
 const Landing = () => {
-  const { user } = useContext(AuthContext);
-  const navigate = useNavigate();
+  const { user, loading: authLoading } = useAuth();
+  const { isAdmin, isAllowed }         = useRole();
+  const navigate                       = useNavigate();
+  const queryClient                    = useQueryClient();
 
-  const [allQuotes, setAllQuotes] = useState(LOCAL_QUOTES);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const [cardIdx, setCardIdx] = useState(0);
-  const [showFeatures, setShowFeatures] = useState(false);
-  const [isAutoPlay, setIsAutoPlay] = useState(true);
-  const autoRef = useRef(null);
-
-  // Fetch Firebase quotes
+  /* AUTH GATE */
   useEffect(() => {
-    const load = async () => {
-      try {
-        const snap = await get(ref(db, 'quotes'));
-        const data = snap.val();
-        if (data) {
-          const arr = Object.values(data);
-          setAllQuotes(arr);
-          setCardIdx(Math.floor(Math.random() * arr.length));
-        }
-      } catch (e) {
-        console.error('Firebase error:', e);
-        toast.error('Could not load quotes, using local ones.');
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    load();
+    if (authLoading) return;
+    if (!user || !user.emailVerified || !user.adminApproved) {
+      navigate('/guest', { replace: true });
+    }
+  }, [user, authLoading, navigate]);
+
+  const [contactOpen,   setContactOpen]   = useState(false);
+  const [lyricOpen,     setLyricOpen]     = useState(false);
+  const [modalOpen,     setModalOpen]     = useState(false);
+  const [isAutoPlay,    setIsAutoPlay]    = useState(true);
+  const [statsInView,   setStatsInView]   = useState(false);
+  const [activeSection, setActiveSection] = useState('hero');
+
+  const statsRef = useRef(null);
+  const SECTIONS  = ['hero','features','how','stats','contact'];
+
+  /* active section tracking */
+  useEffect(() => {
+    const observers = SECTIONS.map(id => {
+      const el = document.getElementById(id);
+      if (!el) return null;
+      const obs = new IntersectionObserver(
+        ([e]) => { if (e.isIntersecting) setActiveSection(id); },
+        { threshold: 0.3 }
+      );
+      obs.observe(el);
+      return obs;
+    });
+    return () => observers.forEach(o => o?.disconnect());
   }, []);
 
-  // Auto‑rotate interval
+  /* stats inView trigger */
   useEffect(() => {
-    if (isAutoPlay) {
-      autoRef.current = setInterval(() => setCardIdx(i => (i + 1) % allQuotes.length), 10000);
-    } else {
-      clearInterval(autoRef.current);
-    }
-    return () => clearInterval(autoRef.current);
-  }, [isAutoPlay, allQuotes.length]);
+    if (!statsRef.current) return;
+    const obs = new IntersectionObserver(([e]) => { if (e.isIntersecting) setStatsInView(true); }, { threshold: 0.25 });
+    obs.observe(statsRef.current);
+    return () => obs.disconnect();
+  }, []);
 
-  const handleRefresh = useCallback(() => {
-    if (isRefreshing) return;
-    setIsRefreshing(true);
-    const timeout = setTimeout(() => {
-      setCardIdx(prev => {
-        let next = Math.floor(Math.random() * allQuotes.length);
-        while (next === prev && allQuotes.length > 1) {
-          next = Math.floor(Math.random() * allQuotes.length);
-        }
-        return next;
-      });
-      setIsRefreshing(false);
-    }, 500);
-    return () => clearTimeout(timeout);
-  }, [allQuotes.length, isRefreshing]);
+  const scrollTo = (id) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
-  const currentQuote = useMemo(() => allQuotes[cardIdx] || allQuotes[0], [allQuotes, cardIdx]);
+  /* data */
+  const { data, isLoading } = useQuery({
+    queryKey: ['quotes'],
+    queryFn:  () => quotesApi.getAll(),
+    staleTime: 60_000,
+    enabled: !!user,
+  });
+  const allQuotes = data?.quotes ?? [];
+
+  const catBreakdown = allQuotes.reduce((acc, q) => {
+    if (q.category) acc[q.category] = (acc[q.category] || 0) + 1;
+    return acc;
+  }, {});
+  const topCats = Object.entries(catBreakdown).sort((a, b) => b[1] - a[1]).slice(0, 5);
+  const maxCat  = topCats[0]?.[1] ?? 1;
+
+  const createMutation = useMutation({
+    mutationFn: quotesApi.create,
+    onSuccess: (res) => {
+      queryClient.setQueryData(['quotes'], old => ({ ...old, quotes: [res.quote, ...(old?.quotes ?? [])] }));
+      toast.success('Quote added!');
+      setModalOpen(false);
+    },
+    onError: (err) => toast.error(err.message || 'Failed'),
+  });
+  const handleAddQuote = useCallback(d => createMutation.mutate(d), [createMutation]);
+
+  /* block render while resolving */
+  if (authLoading || !user || !user.emailVerified || !user.adminApproved) {
+    return (
+      <div className="fixed inset-0 flex items-center justify-center" style={{ background: NAVY }}>
+        <motion.div animate={{ scale: [1,1.12,1], opacity: [0.5,1,0.5] }}
+          transition={{ duration: 1.5, repeat: Infinity }}
+          className="w-12 h-12 rounded-[14px] flex items-center justify-center font-black text-xl"
+          style={{ background: `linear-gradient(135deg,${ACCENT},${ACCENT2})`, color: NAVY }}>D</motion.div>
+      </div>
+    );
+  }
+
+  const firstName = user.displayName?.split(' ')[0] || user.email?.split('@')[0] || 'there';
 
   return (
-    <div className="min-h-screen bg-[#0A0E1A] text-white transition-colors duration-300">
-      <Navbar />
+    <div className="text-white overflow-x-hidden" style={{ background: NAVY }}>
 
-      <main className="pt-16">
-        {/* HERO SECTION */}
-        <section
-          id="home"
-          className="min-h-[calc(100vh-4rem)] flex flex-col xl:flex-row items-center justify-center gap-10 xl:gap-20 px-4 sm:px-8 lg:px-16 py-12 max-w-7xl mx-auto"
-        >
-          {/* Left column */}
-          <motion.div
-            initial={{ opacity: 0, x: -36 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.7, delay: 0.1 }}
-            className="flex-1 min-w-0 max-w-lg"
-          >
-            <div className="flex items-center gap-2 mb-5">
-              <span className="w-1.5 h-1.5 rounded-full animate-pulse bg-[#F59E0B]" />
-              <span className="text-[11px] font-bold tracking-[0.22em] uppercase text-[#F59E0B]">
-                Daily Inspiration Platform
-              </span>
-            </div>
+      {/* Navbar — passes section data for active highlighting */}
+      <Navbar
+        activeSection={activeSection}
+        onSectionClick={scrollTo}
+        onContactOpen={() => setContactOpen(true)}
+      />
 
-            <h1 className="text-5xl sm:text-6xl font-black tracking-tight leading-[1.04] mb-5">
-              Words that<br />
-              <span className={`bg-clip-text text-transparent bg-gradient-to-r ${ACCENT_GRADIENT}`}>
-                move you.
-              </span>
-            </h1>
+      {/* Modals */}
+      <ContactModal  isOpen={contactOpen} onClose={() => setContactOpen(false)} />
+      <AddLyricModal isOpen={lyricOpen}   onClose={() => setLyricOpen(false)}
+                     onSuccess={() => queryClient.invalidateQueries(['lyrics'])} />
+      {isAdmin && (
+        <NewQuoteModal isOpen={modalOpen} onClose={() => setModalOpen(false)}
+                       onSubmit={handleAddQuote} isSubmitting={createMutation.isPending} />
+      )}
 
-            <p className="text-[15px] sm:text-base leading-relaxed mb-7 max-w-md text-gray-400">
-              Discover wisdom from the world's greatest minds. A fresh quote every day to fuel your purpose, sharpen your mindset, and drive you forward.
-            </p>
+      {/* ambient glows */}
+      <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
+        <div className="absolute -top-32 left-1/2 -translate-x-1/2 w-[700px] h-[350px] rounded-full blur-[130px] opacity-10"
+             style={{ background: ACCENT }} />
+        <div className="absolute top-[55vh] -right-32 w-[400px] h-[400px] rounded-full blur-[100px] opacity-6"
+             style={{ background: '#818CF8' }} />
+        <div className="absolute bottom-[20vh] -left-32 w-[350px] h-[350px] rounded-full blur-[90px] opacity-5"
+             style={{ background: '#34D399' }} />
+      </div>
 
-            <div id="quotes">
-              {isLoading
-                ? <div className="mb-7"><LoadingSpinner size="medium" /></div>
-                : <QuotePanel quote={currentQuote} dark={true} />
-              }
-            </div>
+      <main className="relative z-10">
 
-            <div className="flex flex-wrap gap-3 mb-6">
-              <motion.button
-                whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
-                onClick={handleRefresh}
-                disabled={isRefreshing}
-                className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-sm shadow-lg transition-all bg-gradient-to-r ${ACCENT_GRADIENT} text-gray-950 disabled:opacity-50`}
-              >
-                <FiRefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''} />
-                New Quote
-              </motion.button>
+        {/* ══════════════════════════════════════════════
+            §1  HERO
+        ══════════════════════════════════════════════ */}
+        <section id="hero" className="min-h-screen pt-16 flex flex-col xl:flex-row
+                                       items-center justify-center gap-10 xl:gap-16
+                                       px-4 sm:px-8 lg:px-16 max-w-7xl mx-auto">
+          {/* LEFT */}
+          <motion.div initial={{ opacity: 0, x: -28 }} animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.65, delay: 0.1, ease: [0.22,1,0.36,1] }}
+            className="flex-1 min-w-0 max-w-xl py-16 xl:py-0">
 
-              <motion.button
-                whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
-                onClick={() => setIsAutoPlay(p => !p)}
-                className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-sm border transition-all border-white/15 bg-white/5 hover:bg-white/10 text-white"
-              >
-                {isAutoPlay ? <FiPause size={14} /> : <FiPlay size={14} />}
-                {isAutoPlay ? 'Pause' : 'Resume'}
-              </motion.button>
-
-              <motion.button
-                whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
-                onClick={() => setShowFeatures(s => !s)}
-                className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-sm border transition-all border-white/15 bg-white/5 hover:bg-white/10 text-white"
-              >
-                <FiArrowRight size={14} className={`transition-transform duration-300 ${showFeatures ? 'rotate-90' : ''}`} />
-                {showFeatures ? 'Hide' : 'Features'}
-              </motion.button>
-
-              {user && (
-                <motion.button
-                  whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
-                  onClick={() => navigate('/dashboard')}
-                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-sm transition-all bg-white/10 hover:bg-white/15 text-white border border-white/15"
-                >
-                  <FiGrid size={14} />
-                  Dashboard
-                </motion.button>
+            <div className="flex items-center gap-3 mb-5">
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-full border border-white/10"
+                   style={{ background: `${ACCENT}10` }}>
+                <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: ACCENT }} />
+                <span className="text-[10px] font-bold tracking-[0.2em] uppercase" style={{ color: ACCENT }}>
+                  Daily Inspiration Platform
+                </span>
+              </div>
+              {isAdmin && (
+                <motion.span initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }}
+                  transition={{ delay: 0.6 }}
+                  className="flex items-center gap-1 px-2.5 py-1 rounded-full text-[9px] font-bold uppercase"
+                  style={{ background: 'rgba(129,140,248,0.12)', color: '#818CF8', border: '1px solid rgba(129,140,248,0.22)' }}>
+                  <FiShield size={9} />Admin
+                </motion.span>
               )}
             </div>
 
-            <div className="flex gap-2.5 flex-wrap">
-              <Stat value={`${allQuotes.length}+`} label="Quotes" />
-              <Stat value="10s"                    label="Auto-rotate" />
-              <Stat value="Free"                   label="Always" />
+            <div className="mb-5 overflow-hidden">
+              <motion.p initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.15, duration: 0.45 }}
+                className="text-[13px] sm:text-[14px] text-white/35 font-medium tracking-wider mb-3">
+                Good to have you, {firstName} —
+              </motion.p>
+              <motion.h1 initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.2, duration: 0.55, ease: [0.22,1,0.36,1] }}
+                className="text-[44px] sm:text-[58px] font-black tracking-tight leading-[1.04] text-white">
+                Words that<br />
+                <span className="bg-clip-text text-transparent"
+                      style={{ backgroundImage: `linear-gradient(110deg,${ACCENT} 20%,${ACCENT2} 80%)` }}>
+                  move you.
+                </span>
+              </motion.h1>
             </div>
+
+            <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+              transition={{ delay: 0.35, duration: 0.5 }}
+              className="text-[14px] sm:text-[15px] leading-relaxed mb-6 max-w-md text-white/45">
+              Curate wisdom, track inspiration, and automatically share powerful quotes to X and LinkedIn — all from one elegant platform.
+            </motion.p>
+
+            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.45, duration: 0.45 }} className="mb-5">
+              <QuoteFeature quotes={allQuotes} autoPlay={isAutoPlay} onAutoPlay={setIsAutoPlay} />
+            </motion.div>
+
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+              transition={{ delay: 0.55, duration: 0.4 }}
+              className="flex flex-wrap items-center gap-2 mb-6">
+
+              {isAdmin ? (
+                <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}
+                  onClick={() => setModalOpen(true)}
+                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-[13px] font-bold text-gray-950"
+                  style={{ background: `linear-gradient(to right,${ACCENT},${ACCENT2})`, boxShadow: `0 4px 20px ${ACCENT}28` }}>
+                  <FiPlus size={14} />New Quote
+                </motion.button>
+              ) : (
+                <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}
+                  onClick={() => navigate('/dashboard')}
+                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-[13px] font-bold text-gray-950"
+                  style={{ background: `linear-gradient(to right,${ACCENT},${ACCENT2})`, boxShadow: `0 4px 20px ${ACCENT}28` }}>
+                  <FiEye size={14} />My Collection
+                </motion.button>
+              )}
+
+              <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}
+                onClick={() => setIsAutoPlay(p => !p)}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-[13px] font-medium border transition-all"
+                style={isAutoPlay
+                  ? { background:`${ACCENT}15`, borderColor:`${ACCENT}35`, color:ACCENT }
+                  : { background:'rgba(255,255,255,0.05)', borderColor:'rgba(255,255,255,0.1)', color:'rgba(255,255,255,0.45)' }
+                }>
+                {isAutoPlay ? <FiPause size={12}/> : <FiPlay size={12}/>}
+                {isAutoPlay ? 'Pause' : 'Resume'}
+              </motion.button>
+
+              <RoleGuard allowedRoles={[ROLES.ADMIN, ROLES.USER]}>
+                <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}
+                  onClick={() => navigate('/dashboard')}
+                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-[13px] font-medium border border-white/10 bg-white/5 text-white/50 hover:text-white hover:bg-white/8 transition-all">
+                  <FiGrid size={13}/>Dashboard
+                </motion.button>
+              </RoleGuard>
+
+              <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}
+                onClick={() => setContactOpen(true)}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-[13px] font-medium border border-white/10 bg-white/5 text-white/50 hover:text-white hover:bg-white/8 transition-all">
+                <FiMail size={13}/>Contact
+              </motion.button>
+
+              <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}
+                onClick={() => scrollTo('features')}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-[13px] font-medium border border-white/10 bg-white/5 text-white/50 hover:text-white hover:bg-white/8 transition-all">
+                <FiArrowRight size={13}/>Explore
+              </motion.button>
+            </motion.div>
+
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+              transition={{ delay: 0.65 }} className="flex gap-3 flex-wrap">
+              {[
+                { v: isLoading ? '…' : `${allQuotes.length}+`, l: 'Quotes' },
+                { v: '10s', l: 'Auto-rotate' },
+                { v: 'Free', l: 'Always' },
+              ].map(({ v, l }) => (
+                <div key={l} className="flex flex-col items-center px-4 py-2 rounded-xl border border-white/8" style={{ background: SLATE }}>
+                  <span className="text-[17px] font-black" style={{ color: ACCENT }}>{v}</span>
+                  <span className="text-[10px] text-white/35 mt-0.5">{l}</span>
+                </div>
+              ))}
+            </motion.div>
           </motion.div>
 
-          {/* Right column: HeroCard */}
-          <motion.div
-            initial={{ opacity: 0, y: 60 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.82, delay: 0.22, type: 'spring', stiffness: 62 }}
-            className="shrink-0 flex items-center justify-center"
-            style={{
-              filter: 'drop-shadow(0 40px 56px rgba(245,158,11,0.22))'
-            }}
-          >
-            <HeroCard
-              quotes={allQuotes}
-              externalIndex={cardIdx}
-              onIndexChange={setCardIdx}
+          {/* RIGHT — phone */}
+          <motion.div initial={{ opacity: 0, y: 52 }} animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8, delay: 0.3, type: 'spring', stiffness: 52, damping: 14 }}
+            className="shrink-0 hidden xl:flex items-center justify-center"
+            style={{ filter: `drop-shadow(0 40px 60px ${ACCENT}1C)` }}>
+            <DailyCard
+              onContactOpen={() => setContactOpen(true)}
+              onAddLyric={isAdmin ? () => setLyricOpen(true) : undefined}
             />
+          </motion.div>
+
+          {/* scroll hint */}
+          <motion.button onClick={() => scrollTo('features')}
+            animate={{ y:[0,7,0] }} transition={{ duration:2, repeat:Infinity }}
+            className="absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1.5 text-white/20 hover:text-white/40 transition-colors xl:hidden">
+            <span className="text-[10px] uppercase tracking-widest">Scroll</span>
+            <FiChevronDown size={16}/>
+          </motion.button>
+        </section>
+
+        <Hr />
+
+        {/* ══════════════════════════════════════════════
+            §2  FEATURES
+        ══════════════════════════════════════════════ */}
+        <section id="features" className="py-24 px-4 sm:px-8 lg:px-16 max-w-7xl mx-auto">
+          <SectionHead eyebrow="Platform features" title="Everything you need to thrive"
+            sub="Damuchi is built for creators who want their wisdom to reach the world — beautifully and automatically." />
+
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+            {[
+              { icon: FiBookOpen, color: ACCENT,   title: 'Personal quote library',    desc: 'Build and manage your own curated collection of quotes, organised by category, author, and date added.', delay: 0 },
+              { icon: FiStar,     color: '#818CF8', title: 'Favourites system',         desc: 'Bookmark quotes that resonate most. Access your saved gems instantly from your personal dashboard at any time.', delay: 0.07 },
+              { icon: FiShield,   color: '#34D399', title: 'Role-based access control', desc: 'Three-tier system — Guest, User, Admin. Every action is gated by role and permission, keeping your data secure.', delay: 0.14 },
+              { icon: FiZap,      color: '#FB923C', title: 'Auto-post to social media', desc: 'Connect X and LinkedIn. Schedule quotes to publish automatically as text or designed image cards.', badge: 'Soon', delay: 0.21 },
+              { icon: FiActivity, color: '#F87171', title: 'Redis caching + rate limits',desc: 'All reads cached with 5-min TTL. Writes invalidate caches. Rate limiting via sliding-window counters.', delay: 0.28 },
+              { icon: FiGlobe,    color: '#7DD3FC', title: 'Multi-platform ready',      desc: 'Responsive across all devices. Smooth animations, optimistic UI updates, and offline-friendly data caching.', delay: 0.35 },
+            ].map(f => <FeatureCard key={f.title} {...f} />)}
+          </div>
+
+          {/* social post preview */}
+          <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }} transition={{ delay: 0.2, duration: 0.5 }}
+            className="p-8 rounded-3xl border border-white/8 relative overflow-hidden"
+            style={{ background: `${SLATE}CC`, backdropFilter: 'blur(16px)' }}>
+            <div className="absolute top-0 right-0 w-64 h-64 rounded-full blur-[80px] opacity-6 pointer-events-none"
+                 style={{ background: ACCENT }} />
+            <div className="relative grid md:grid-cols-2 gap-8 items-center">
+              <div>
+                <span className="text-[10px] font-bold uppercase tracking-[0.2em]" style={{ color: ACCENT }}>Coming soon</span>
+                <h3 className="text-[22px] font-black text-white mt-2 mb-3 tracking-tight">Auto-post quotes to X & LinkedIn</h3>
+                <p className="text-[13px] text-white/50 leading-relaxed mb-5">
+                  Select a quote, pick your format, set a schedule — Damuchi posts automatically via OAuth 2.0. Tokens are encrypted at rest.
+                </p>
+                <div className="flex gap-2.5">
+                  {[{icon:FiTwitter,color:'#1DA1F2',label:'X (Twitter)'},{icon:FiLinkedin,color:'#0A66C2',label:'LinkedIn'}].map(({icon:Icon,color,label})=>(
+                    <div key={label} className="flex items-center gap-2 px-3 py-1.5 rounded-xl border border-white/8" style={{background:`${color}12`}}>
+                      <Icon size={13} style={{color}} /><span className="text-[12px] text-white/60">{label}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                {['Write quote','Pick format','Set schedule','Auto-published'].map((s,i)=>(
+                  <div key={s} className="flex items-center gap-2.5 p-3 rounded-xl border border-white/6" style={{background:MID}}>
+                    <div className="w-6 h-6 rounded-lg flex items-center justify-center text-[10px] font-black shrink-0"
+                         style={{background:`${ACCENT}18`,color:ACCENT}}>{i+1}</div>
+                    <span className="text-[12px] text-white/55">{s}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
           </motion.div>
         </section>
 
-        {/* FEATURES SECTION (toggleable) */}
-        <AnimatePresence>
-          {showFeatures && (
-            <motion.section
-              id="features"
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: 'auto' }}
-              exit={{ opacity: 0, height: 0 }}
-              transition={{ duration: 0.38 }}
-              className="overflow-hidden"
-            >
-              <div className="max-w-7xl mx-auto px-4 sm:px-8 lg:px-16 pb-20">
-                <div className="rounded-3xl p-8 sm:p-12 border bg-[#1C2135]/55 border-white/8 backdrop-blur-sm">
-                  <div className="text-center mb-10">
-                    <span className="text-[11px] font-bold tracking-[0.22em] uppercase text-[#F59E0B]">
-                      Platform Features
-                    </span>
-                    <h2 className="text-3xl sm:text-4xl font-black mt-2 tracking-tight text-white">
-                      Why You'll Love This
-                    </h2>
-                    <p className="text-sm mt-2 max-w-sm mx-auto text-gray-400">
-                      Built for people who demand more from every day.
-                    </p>
-                  </div>
-                  <FeaturesGrid dark={true} />
-                </div>
+        <Hr />
+
+        {/* ══════════════════════════════════════════════
+            §3  HOW IT WORKS
+        ══════════════════════════════════════════════ */}
+        <section id="how" className="py-24 px-4 sm:px-8 lg:px-16 max-w-7xl mx-auto">
+          <div className="grid lg:grid-cols-2 gap-16 items-start">
+            <div>
+              <SectionHead eyebrow="How it works" left
+                title={<>From zero to curator<br/>in minutes</>}
+                sub="Damuchi's approval flow ensures every member is verified and trusted." />
+              <div className="space-y-0">
+                {[
+                  {num:1,icon:FiUsers,       color:ACCENT,   title:'Create an account',    desc:'Sign up with your email. Your account starts as a guest with read-only access to public quotes.',isLast:false,delay:0},
+                  {num:2,icon:FiCheckCircle, color:'#4ade80',title:'Verify your email',     desc:'Click the verification link in your inbox. This confirms your identity and queues you for admin review.',isLast:false,delay:0.1},
+                  {num:3,icon:FiClock,       color:'#818CF8',title:'Admin approval',         desc:'An admin reviews and approves your account. You receive a welcome email with full access unlocked.',isLast:false,delay:0.2},
+                  {num:4,icon:FiZap,         color:ACCENT2,  title:'Full access activated', desc:'Create quotes, manage your collection, connect social accounts, and enjoy the full Damuchi experience.',isLast:true, delay:0.3},
+                ].map(s=><StepRow key={s.num} {...s}/>)}
               </div>
-            </motion.section>
+            </div>
+
+            <div className="space-y-4">
+              <motion.div initial={{opacity:0,x:18}} whileInView={{opacity:1,x:0}}
+                viewport={{once:true}} transition={{duration:0.5}}
+                className="p-6 rounded-2xl border border-white/8" style={{background:SLATE}}>
+                <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-white/25 mb-4">Tech stack</p>
+                <div className="grid grid-cols-2 gap-2.5">
+                  {[['Frontend','React 18 + Vite',ACCENT],['Animation','Framer Motion','#818CF8'],['State','Redux Toolkit','#34D399'],['Data','React Query','#FB923C'],['Backend','Node.js + Express','#38BDF8'],['Database','Firebase RTDB + Firestore','#F87171'],['Cache','Redis Cloud','#FCD34D'],['Email','Resend','#7DD3FC']].map(([label,value,color])=>(
+                    <div key={label} className="flex flex-col gap-0.5 p-3 rounded-xl border border-white/6" style={{background:MID}}>
+                      <span className="text-[9px] font-bold uppercase tracking-wider" style={{color}}>{label}</span>
+                      <span className="text-[12px] text-white/60">{value}</span>
+                    </div>
+                  ))}
+                </div>
+              </motion.div>
+
+              <motion.div initial={{opacity:0,x:18}} whileInView={{opacity:1,x:0}}
+                viewport={{once:true}} transition={{delay:0.15,duration:0.5}}
+                className="p-6 rounded-2xl border border-white/8" style={{background:SLATE}}>
+                <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-white/25 mb-4">Security</p>
+                <div className="space-y-2.5">
+                  {[
+                    {icon:FiLock,    color:'#34D399',text:'Firebase Auth — industry-standard JWT tokens'},
+                    {icon:FiShield,  color:'#818CF8',text:'Role-based access control on every endpoint'},
+                    {icon:FiActivity,color:ACCENT,   text:'Rate limiting — 60/min general, 10/15min auth'},
+                    {icon:FiGlobe,   color:'#FB923C',text:'Redis sessions + full audit logging'},
+                  ].map(({icon:Icon,color,text})=>(
+                    <div key={text} className="flex items-center gap-3">
+                      <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" style={{background:`${color}18`}}>
+                        <Icon size={13} style={{color}}/>
+                      </div>
+                      <p className="text-[12px] text-white/55 leading-relaxed">{text}</p>
+                    </div>
+                  ))}
+                </div>
+              </motion.div>
+            </div>
+          </div>
+        </section>
+
+        <Hr />
+
+        {/* ══════════════════════════════════════════════
+            §4  STATS
+        ══════════════════════════════════════════════ */}
+        <section id="stats" ref={statsRef} className="py-24 px-4 sm:px-8 lg:px-16 max-w-7xl mx-auto">
+          <SectionHead eyebrow="By the numbers" title="Your collection at a glance"
+            sub="Live data from your Damuchi account — updated in real time." />
+
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+            <AnimatedStat value={allQuotes.length} suffix="+" label="Total quotes" icon={FiBookOpen} color={ACCENT} inView={statsInView} />
+            <AnimatedStat value={new Set(allQuotes.map(q=>q.author)).size} label="Unique authors" icon={FiUsers} color="#818CF8" inView={statsInView} />
+            <AnimatedStat value={new Set(allQuotes.map(q=>q.category).filter(Boolean)).size} label="Categories" icon={FiGrid} color="#34D399" inView={statsInView} />
+            <AnimatedStat value={allQuotes.filter(q=>new Date(q.createdAt)>new Date(Date.now()-7*86400000)).length} label="This week" icon={FiTrendingUp} color="#FB923C" inView={statsInView} />
+          </div>
+
+          {topCats.length > 0 && (
+            <motion.div initial={{opacity:0,y:16}} whileInView={{opacity:1,y:0}}
+              viewport={{once:true}} transition={{duration:0.5}}
+              className="p-6 rounded-2xl border border-white/8" style={{background:SLATE}}>
+              <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-white/25 mb-5">Category breakdown</p>
+              <div className="space-y-3">
+                {topCats.map(([cat,count])=>{
+                  const color=catColor(cat), pct=Math.round((count/maxCat)*100);
+                  return (
+                    <div key={cat} className="flex items-center gap-4">
+                      <span className="text-[12px] text-white/50 capitalize w-24 shrink-0">{cat}</span>
+                      <div className="flex-1 h-2 bg-white/6 rounded-full overflow-hidden">
+                        <motion.div initial={{width:0}} whileInView={{width:`${pct}%`}}
+                          viewport={{once:true}} transition={{duration:0.7,delay:0.1,ease:'easeOut'}}
+                          className="h-full rounded-full" style={{background:color}} />
+                      </div>
+                      <span className="text-[11px] text-white/30 tabular-nums w-6 text-right">{count}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </motion.div>
           )}
-        </AnimatePresence>
+        </section>
 
-        <ContactSection />
+        <Hr />
 
-        {/* FOOTER */}
-        <footer className="py-5 text-center text-xs border-t border-white/5 text-gray-600">
-          © {new Date().getFullYear()} Damuchi · Built with purpose in Nairobi
+        {/* ══════════════════════════════════════════════
+            §5  CONTACT
+        ══════════════════════════════════════════════ */}
+        <section id="contact" className="py-24 px-4 sm:px-8 lg:px-16 max-w-7xl mx-auto">
+          <SectionHead eyebrow="Get in touch" title="We're here for you"
+            sub="Questions, feedback, bug reports, or collaboration — we typically respond within 24 hours." />
+
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+            {[
+              {icon:FiMail,    color:ACCENT,   title:'Email',   value:'hello@damuchi.app',href:'mailto:hello@damuchi.app'},
+              {icon:FiTwitter, color:'#1DA1F2',title:'X',       value:'@DamuchiApp',      href:'https://twitter.com/damuchiapp'},
+              {icon:FiLinkedin,color:'#0A66C2',title:'LinkedIn',value:'Damuchi',           href:'https://linkedin.com/company/damuchi'},
+              {icon:FiBookOpen,color:'#34D399',title:'Docs',    value:'damuchi.app/docs',  href:'/docs'},
+            ].map(({icon:Icon,color,title,value,href})=>(
+              <motion.a key={title} href={href}
+                target={href.startsWith('http')?'_blank':undefined}
+                rel={href.startsWith('http')?'noopener noreferrer':undefined}
+                initial={{opacity:0,y:12}} whileInView={{opacity:1,y:0}}
+                viewport={{once:true}} transition={{duration:0.35}}
+                whileHover={{y:-3}}
+                className="flex flex-col gap-3 p-5 rounded-2xl border border-white/8 hover:border-white/15 transition-all group"
+                style={{background:SLATE}}>
+                <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{background:`${color}18`}}>
+                  <Icon size={16} style={{color}}/>
+                </div>
+                <div>
+                  <p className="text-[11px] font-bold text-white/35 uppercase tracking-wide">{title}</p>
+                  <p className="text-[13px] text-white/70 group-hover:text-white transition-colors mt-0.5">{value}</p>
+                </div>
+              </motion.a>
+            ))}
+          </div>
+
+          <motion.div initial={{opacity:0,scale:0.98}} whileInView={{opacity:1,scale:1}}
+            viewport={{once:true}}
+            className="text-center p-12 rounded-3xl border border-white/8 relative overflow-hidden"
+            style={{background:`${SLATE}CC`,backdropFilter:'blur(12px)'}}>
+            <div className="absolute inset-0 pointer-events-none">
+              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[200px] rounded-full blur-[80px] opacity-8"
+                   style={{background:ACCENT}}/>
+            </div>
+            <div className="relative">
+              <div className="text-4xl mb-4">✨</div>
+              <h3 className="text-[26px] font-black text-white mb-3 tracking-tight">Send us a message</h3>
+              <p className="text-[14px] text-white/45 mb-7 max-w-md mx-auto leading-relaxed">
+                Have a feature idea, found a bug, or want to collaborate? Open the contact form — we read every message.
+              </p>
+              <motion.button whileHover={{scale:1.03}} whileTap={{scale:0.97}}
+                onClick={() => setContactOpen(true)}
+                className="inline-flex items-center gap-2.5 px-8 py-3.5 rounded-2xl font-bold text-[14px] text-gray-950"
+                style={{background:`linear-gradient(to right,${ACCENT},${ACCENT2})`,boxShadow:`0 8px 32px ${ACCENT}28`}}>
+                <FiMail size={15}/>Open contact form
+              </motion.button>
+            </div>
+          </motion.div>
+        </section>
+
+        {/* Footer */}
+        <footer className="py-8 border-t border-white/5">
+          <div className="max-w-7xl mx-auto px-4 sm:px-8 flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="flex items-center gap-2.5">
+              <div className="w-7 h-7 rounded-[8px] flex items-center justify-center font-black text-sm"
+                   style={{background:`linear-gradient(135deg,${ACCENT},${ACCENT2})`,color:NAVY}}>D</div>
+              <span className="font-extrabold text-[15px] text-white">Damu<span style={{color:ACCENT}}>chi</span></span>
+            </div>
+            <p className="text-[11px] text-white/20">© {new Date().getFullYear()} Damuchi · Built with purpose in Nairobi 🇰🇪</p>
+            <div className="flex items-center gap-4">
+              {[{href:'/docs',l:'Docs'},{href:'https://twitter.com/damuchiapp',l:'X'},{href:'/dashboard',l:'Dashboard'}].map(({href,l})=>(
+                <a key={l} href={href} className="text-[11px] text-white/30 hover:text-white/65 transition-colors">{l}</a>
+              ))}
+            </div>
+          </div>
         </footer>
       </main>
-
-      {/* Global animation styles for floating particles */}
-      <style>{`
-        @keyframes floatGlow {
-          0%, 100% { transform: translateY(0px) scale(1); opacity: 0.2; }
-          50% { transform: translateY(-20px) scale(1.2); opacity: 0.6; }
-        }
-      `}</style>
     </div>
   );
 };

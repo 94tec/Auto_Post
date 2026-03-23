@@ -19,26 +19,26 @@ import {
   verifyToken, optionalAuth,
   requirePermission, requireActiveAccount,
 }                              from '../middlewares/auth.js';
-import { apiRateLimiter }      from '../middlewares/rateLimiter.js';
+import { apiLimiter }      from '../middlewares/rateLimiter.js';
 
 const router = Router();
 
-router.get('/',    apiRateLimiter, optionalAuth, getQuotes);
-router.get('/my',  apiRateLimiter, verifyToken,  getMyQuotes);
-router.get('/:id', apiRateLimiter, optionalAuth, getQuote);
+router.get('/',    apiLimiter, optionalAuth, getQuotes);
+router.get('/my',  apiLimiter, verifyToken,  getMyQuotes);
+router.get('/:id', apiLimiter, optionalAuth, getQuote);
 
 router.post('/',
-  apiRateLimiter, verifyToken, requireActiveAccount, requirePermission('write'),
+  apiLimiter, verifyToken, requireActiveAccount, requirePermission('write'),
   createQuote,
 );
 
 router.patch('/:id',
-  apiRateLimiter, verifyToken, requireActiveAccount, requirePermission('write'),
+  apiLimiter, verifyToken, requireActiveAccount, requirePermission('write'),
   updateQuote,
 );
 
 router.delete('/:id',
-  apiRateLimiter, verifyToken, requirePermission('delete'),
+  apiLimiter, verifyToken, requirePermission('delete'),
   deleteQuote,
 );
 

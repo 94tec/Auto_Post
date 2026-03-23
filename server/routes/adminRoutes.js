@@ -22,7 +22,7 @@
  */
 import { Router }       from 'express';
 import {
-  createAdmin, getQueue, approveUser,
+  createAdmin,createUser, getQueue, approveUser,
   listUsers, getUserDetail,
   grantWrite, revokeWrite, patchPermissions,
   suspendUser, reactivateUser,
@@ -30,12 +30,12 @@ import {
   getAuditLogs, getStats,
 }                       from '../controllers/auth/adminController.js';
 import { verifyToken, requireAdmin } from '../middlewares/auth.js';
-import { adminRateLimiter }          from '../middlewares/rateLimiter.js';
+import { apiLimiter }          from '../middlewares/rateLimiter.js';
 
 const router = Router();
 
 // ── Apply guards to entire router ────────────────────────────────
-router.use(verifyToken, requireAdmin, adminRateLimiter);
+router.use(verifyToken, requireAdmin, apiLimiter);
 
 // Create an admin user (only for admins)
 router.post('/users', createAdmin);
@@ -47,6 +47,7 @@ router.get('/approval-queue', getQueue);
 router.get('/pending-write',  getPendingWriteAccess);
 
 // ── User list ─────────────────────────────────────────────────────
+router.post('/users/create-user', createUser);
 router.get('/users',       listUsers);
 router.get('/users/:uid',  getUserDetail);
 

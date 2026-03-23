@@ -1,93 +1,52 @@
 /**
  * controllers/auth/userController.js
- * ═══════════════════════════════════════════════════════════════════
- * Account-management operations for signed-in users.
- * "Things you do to your own account once you're already in."
+ * ═══════════════════════════════════════════════════════════════
+ * Account-management for signed-in users.
+ * All routes require verifyToken + requireActiveAccount.
  *
- * WHAT LIVES HERE
- * ───────────────────────────────────────────────────────────────────
- *  checkExistingUser(email)  — duplicate-email helper (called by
- *                              authController.register, not a route)
- *  changePassword(req, res)  — POST /api/users/change-password
- *  updateProfile(req, res)   — PATCH /api/users/profile-advanced
- *  deleteAccount(req, res)   — DELETE /api/users/account
+ * EXPORTS (routes)
+ * ───────────────────────────────────────────────────────────────
+ *  POST  /api/users/change-password    changePassword
+ *  PATCH /api/users/profile            updateProfile
+ *  PATCH /api/users/profile-advanced   updateProfileAdvanced (email change)
+ *  DELETE /api/users/account           deleteAccount
  *
- * WHAT WAS REMOVED vs OLD VERSION
- * ───────────────────────────────────────────────────────────────────
- *  createUserAccount  — duplicate of the inline rollback logic in
- *                       authController.register. Removed to avoid two
- *                       implementations of the same thing.
- *
- *  forgotPassword     — moved to authController.js because it lives
- *  verifyResetLink      on /api/auth/* routes. Auth controller owns
- *  resetPassword        everything on those routes consistently.
- *
- * DESIGN NOTES
- * ───────────────────────────────────────────────────────────────────
- *  • Admin SDK exclusively — no client SDK, no rule hits
- *  • Passwords are never stored in our DB — Firebase Auth owns them.
- *    hashPassword / verifyPassword are intentionally absent.
- *  • changePassword delegates entirely to admin.auth().updateUser().
- *    The user does NOT need to provide their current password here
- *    because they are already authenticated (verifyToken ran). If you
- *    want to require the current password as extra confirmation, you
- *    would re-authenticate via Firebase REST API before calling this.
- *  • updateProfile handles both displayName and email changes.
- *    Email changes reset status→pending and emailVerified→false so
- *    the user must re-verify before being fully active again.
- *    For displayName-only changes, use PATCH /api/users/profile
- *    (userRoutes.js) which is slightly lighter.
- * ═══════════════════════════════════════════════════════════════════
+ * EXPORTS (helpers — called by other controllers)
+ * ───────────────────────────────────────────────────────────────
+ *  checkExistingUser(email) → { exists, isVerified, uid? }
+ * ═══════════════════════════════════════════════════════════════
  */
 
-import { admin, adminDb, adminFirestore } from '../../config/firebase.js';
-import AuditLog                           from '../../services/auditLog.js';
-import { validatePasswordStrength }       from '../../utils/validator.js';
-import { STATUS }                         from '../../config/roles.js';
+import { admin, adminDb }           from '../../config/firebase.js';
+import { STATUS }                   from '../../config/roles.js';
+import { validatePasswordStrength } from '../../utils/validator.js';
+import { sendPasswordChangedEmail } from '../../services/emailService.js';
+import AuditLog                     from '../../services/auditLog.js';
+import { rDel, rSet, K, TTL, getIp, getUserAgent } from './authHelpers.js';
 
-/* ── Shared request helpers ──────────────────────────────────────── */
-const getIp = (req) =>
-  req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
-  req.ip ||
-  req.connection?.remoteAddress ||
-  'unknown';
-
-const getUserAgent = (req) => req.headers['user-agent'] || 'unknown';
-
-/* ══════════════════════════════════════════════════════════════════
-   CHECK EXISTING USER
-   Pure helper — no HTTP req/res. Called by authController.register
-   before creating any Firebase resource to block duplicate emails.
-   ══════════════════════════════════════════════════════════════════ */
-
+/* ══════════════════════════════════════════════════════════════
+   CHECK EXISTING USER (helper — used by registerController)
+══════════════════════════════════════════════════════════════ */
 /**
- * Checks Firebase Auth for an existing account with this email.
- * @param {string} email — already trimmed + lowercased
- * @returns {Promise<{ exists: boolean, isVerified?: boolean }>}
+ * Returns { exists: false } or { exists: true, isVerified, uid }.
+ * Throws on unexpected Firebase errors.
  */
 export const checkExistingUser = async (email) => {
   try {
     const record = await admin.auth().getUserByEmail(email.toLowerCase().trim());
-    return { exists: true, isVerified: record.emailVerified };
+    return { exists: true, isVerified: record.emailVerified, uid: record.uid };
   } catch (err) {
     if (err.code === 'auth/user-not-found') return { exists: false };
-    throw err; // unexpected — bubble up to caller
+    throw err;
   }
 };
 
-/* ══════════════════════════════════════════════════════════════════
-   CHANGE PASSWORD  (signed-in user)
+/* ══════════════════════════════════════════════════════════════
+   CHANGE PASSWORD
    POST /api/users/change-password
-   Requires verifyToken + requireActiveAccount middleware.
-
-   The user is already authenticated — we trust the session.
-   If you want to require current-password confirmation before
-   allowing a change, re-authenticate via Firebase REST API first
-   (same pattern as login in authController.authenticateWithFirebase).
-
-   After success, all other sessions are revoked so stolen tokens
-   can't be reused on other devices.
-   ══════════════════════════════════════════════════════════════════ */
+   User is authenticated — no current password needed.
+   Revokes all other sessions after success.
+══════════════════════════════════════════════════════════════ */
 export const changePassword = async (req, res) => {
   const { newPassword } = req.body;
   const uid       = req.uid;
@@ -100,30 +59,51 @@ export const changePassword = async (req, res) => {
 
   const pwCheck = validatePasswordStrength(newPassword);
   if (!pwCheck.valid) {
-    return res.status(400).json({ error: pwCheck.reason, code: 'WEAK_PASSWORD', failed: pwCheck.failed });
+    return res.status(400).json({
+      error:  pwCheck.reason,
+      code:   'WEAK_PASSWORD',
+      failed: pwCheck.failed,
+      hint:   'Use 8+ characters with uppercase, lowercase, a number, and a special character.',
+    });
   }
 
   try {
-    // Firebase Auth owns the password — update through Admin SDK
     await admin.auth().updateUser(uid, { password: newPassword });
+    await admin.auth().revokeRefreshTokens(uid); // log out all other devices
 
-    // Revoke all refresh tokens (logs out all other devices)
-    await admin.auth().revokeRefreshTokens(uid);
+    const now = new Date().toISOString();
 
-    // Record timestamp in RTDB — non-fatal
-    adminDb.ref(`users/${uid}/security`).update({
-      lastPasswordChange: new Date().toISOString(),
-    }).catch(() => {});
+    // Clear mustChangePassword flag + record change timestamp
+    // Both RTDB and Firestore — in parallel, non-fatal
+    await Promise.allSettled([
+      adminDb.ref(`users/${uid}`).update({
+        'basic/mustChangePassword': false,
+        'basic/updatedAt':          now,
+        'security/lastPasswordChange': now,
+      }),
+      admin.firestore().collection('users').doc(uid).update({
+        mustChangePassword: false,
+        updatedAt:          now,
+      }),
+      // Bust Redis profile cache so next fetchUserRole gets fresh data
+      rDel(K.profile(uid)),
+    ]);
 
-    AuditLog.record(AuditLog.EVENTS.PASSWORD_CHANGED, {
-      userId:    uid,
+    // Security email
+    const fbUser = await admin.auth().getUser(uid).catch(() => null);
+    sendPasswordChangedEmail({
+      email:       fbUser?.email || req.user?.basic?.email,
+      displayName: fbUser?.displayName || req.user?.basic?.displayName,
       ip,
       userAgent,
     }).catch(() => {});
 
+    AuditLog.record(AuditLog.EVENTS.PASSWORD_CHANGED, { userId: uid, ip, userAgent }).catch(() => {});
+
     return res.status(200).json({
       success: true,
-      message: 'Password changed successfully. Other sessions have been signed out.',
+      message: 'Password changed successfully. All other sessions have been signed out.',
+      mustChangePassword: false, // frontend can update Redux state immediately
     });
 
   } catch (err) {
@@ -132,106 +112,138 @@ export const changePassword = async (req, res) => {
   }
 };
 
-/* ══════════════════════════════════════════════════════════════════
-   UPDATE PROFILE  (signed-in user)
-   PATCH /api/users/profile-advanced
-   Requires verifyToken + requireActiveAccount middleware.
-
-   Handles displayName and/or email changes:
-     — displayName only: updates Firebase Auth + RTDB + Firestore
-     — email change:     updates all three + resets emailVerified=false
-                         and status=pending so re-verification is required
-
-   For displayName-only changes you can also use the lighter
-   PATCH /api/users/profile in userRoutes.js.
-   ══════════════════════════════════════════════════════════════════ */
+/* ══════════════════════════════════════════════════════════════
+   UPDATE PROFILE (display name only — lightweight)
+   PATCH /api/users/profile
+══════════════════════════════════════════════════════════════ */
 export const updateProfile = async (req, res) => {
-  const { displayName, email } = req.body;
-  const uid       = req.uid;
-  const ip        = getIp(req);
-  const userAgent = getUserAgent(req);
+  const { displayName } = req.body;
+  const uid = req.uid;
 
-  if (!displayName && !email) {
-    return res.status(400).json({ error: 'At least one field is required.', code: 'MISSING_FIELDS' });
+  if (!displayName?.trim()) {
+    return res.status(400).json({ error: 'displayName is required.', code: 'MISSING_FIELDS' });
+  }
+
+  const trimmed = displayName.trim();
+  if (trimmed.length < 2 || trimmed.length > 50) {
+    return res.status(400).json({ error: 'Display name must be 2–50 characters.', code: 'INVALID_LENGTH' });
   }
 
   try {
-    const authUpdates = {};
-    const rtdbUpdates = { 'basic/updatedAt': new Date().toISOString() };
-    const fsUpdates   = { updatedAt: admin.firestore.FieldValue.serverTimestamp() };
-
-    // ── displayName ───────────────────────────────────────────────
-    if (displayName?.trim()) {
-      const trimmed = displayName.trim();
-      if (trimmed.length < 2 || trimmed.length > 50) {
-        return res.status(400).json({ error: 'displayName must be 2–50 characters.', code: 'INVALID_LENGTH' });
-      }
-      authUpdates.displayName          = trimmed;
-      rtdbUpdates['basic/displayName'] = trimmed;
-      fsUpdates.displayName            = trimmed;
-    }
-
-    // ── email ─────────────────────────────────────────────────────
-    if (email?.trim()) {
-      const normalised = email.trim().toLowerCase();
-
-      // Block if another account already owns this email
-      try {
-        const existing = await admin.auth().getUserByEmail(normalised);
-        if (existing.uid !== uid) {
-          return res.status(409).json({ error: 'Email already in use.', code: 'EMAIL_IN_USE' });
-        }
-      } catch (err) {
-        if (err.code !== 'auth/user-not-found') throw err;
-        // auth/user-not-found means the email is available — continue
-      }
-
-      authUpdates.email              = normalised;
-      authUpdates.emailVerified      = false;           // must re-verify new email
-      rtdbUpdates['basic/email']          = normalised;
-      rtdbUpdates['basic/emailVerified']  = false;
-      rtdbUpdates['basic/status']         = STATUS.PENDING; // back to pending until verified
-      fsUpdates.email                = normalised;
-      fsUpdates.emailVerified        = false;
-      fsUpdates.status               = STATUS.PENDING;
-    }
-
-    // ── Write all three stores ────────────────────────────────────
-    await admin.auth().updateUser(uid, authUpdates);
-    await adminDb.ref(`users/${uid}`).update(rtdbUpdates);
-    await adminFirestore.collection('users').doc(uid).update(fsUpdates);
+    const now = new Date().toISOString();
+    await Promise.all([
+      admin.auth().updateUser(uid, { displayName: trimmed }),
+      adminDb.ref(`users/${uid}`).update({ 'basic/displayName': trimmed, 'basic/updatedAt': now }),
+      admin.firestore().collection('users').doc(uid).update({ displayName: trimmed, updatedAt: now }),
+    ]);
 
     AuditLog.record(AuditLog.EVENTS.PROFILE_UPDATED, {
-      userId:    uid,
-      ip,
-      userAgent,
-      metadata:  { updatedFields: Object.keys(authUpdates) },
+      userId:   uid,
+      ip:       getIp(req),
+      metadata: { updatedFields: ['displayName'] },
     }).catch(() => {});
 
-    const emailChanged = !!authUpdates.email;
-    return res.status(200).json({
-      success:  true,
-      message:  emailChanged
-        ? 'Profile updated. Please verify your new email address to reactivate your account.'
-        : 'Profile updated.',
-      ...(emailChanged && { requiresEmailVerification: true, newStatus: STATUS.PENDING }),
-    });
-
+    return res.status(200).json({ success: true, message: 'Profile updated.', displayName: trimmed });
   } catch (err) {
     console.error('[updateProfile]', err.message);
     return res.status(500).json({ error: 'Failed to update profile.', code: 'PROFILE_UPDATE_FAILED' });
   }
 };
 
-/* ══════════════════════════════════════════════════════════════════
-   DELETE ACCOUNT  (signed-in user)
-   DELETE /api/users/account
-   Requires verifyToken + requireActiveAccount middleware.
+/* ══════════════════════════════════════════════════════════════
+   UPDATE PROFILE ADVANCED (displayName + email change)
+   PATCH /api/users/profile-advanced
+   Email changes reset status→pending and require re-verification.
+══════════════════════════════════════════════════════════════ */
+export const updateProfileAdvanced = async (req, res) => {
+  const { displayName, email } = req.body;
+  const uid       = req.uid;
+  const ip        = getIp(req);
+  const userAgent = getUserAgent(req);
 
-   Soft-deletes RTDB + Firestore records (preserves audit trail),
-   then hard-deletes from Firebase Auth (removes login credentials).
-   Clears all session cookies after deletion.
-   ══════════════════════════════════════════════════════════════════ */
+  if (!displayName && !email) {
+    return res.status(400).json({ error: 'Provide at least one field to update.', code: 'MISSING_FIELDS' });
+  }
+
+  try {
+    const authUp  = {};
+    const rtdbUp  = { 'basic/updatedAt': new Date().toISOString() };
+    const fsUp    = { updatedAt: admin.firestore.FieldValue.serverTimestamp() };
+
+    /* Display name ─────────────────────────────────────────────── */
+    if (displayName?.trim()) {
+      const t = displayName.trim();
+      if (t.length < 2 || t.length > 50) {
+        return res.status(400).json({ error: 'Display name must be 2–50 characters.', code: 'INVALID_LENGTH' });
+      }
+      authUp.displayName = t;
+      rtdbUp['basic/displayName'] = t;
+      fsUp.displayName = t;
+    }
+
+    /* Email change ─────────────────────────────────────────────── */
+    let emailChanged = false;
+    if (email?.trim()) {
+      const norm = email.trim().toLowerCase();
+
+      // Check if another account owns this email
+      try {
+        const ex = await admin.auth().getUserByEmail(norm);
+        if (ex.uid !== uid) {
+          return res.status(409).json({ error: 'This email is already in use by another account.', code: 'EMAIL_IN_USE' });
+        }
+      } catch (err) {
+        if (err.code !== 'auth/user-not-found') throw err;
+      }
+
+      authUp.email              = norm;
+      authUp.emailVerified      = false;
+      rtdbUp['basic/email']          = norm;
+      rtdbUp['basic/emailVerified']  = false;
+      rtdbUp['basic/status']         = STATUS.PENDING;
+      fsUp.email         = norm;
+      fsUp.emailVerified = false;
+      fsUp.status        = STATUS.PENDING;
+      emailChanged = true;
+
+      // Bust Redis email cache for old email
+      const oldUser = await admin.auth().getUser(uid);
+      if (oldUser.email) await rDel(K.emailToUid(oldUser.email));
+      // Cache new email
+      await rSet(K.emailToUid(norm), uid, TTL.EMAIL_UID);
+    }
+
+    await admin.auth().updateUser(uid, authUp);
+    await adminDb.ref(`users/${uid}`).update(rtdbUp);
+    await admin.firestore().collection('users').doc(uid).update(fsUp);
+
+    AuditLog.record(AuditLog.EVENTS.PROFILE_UPDATED, {
+      userId: uid, ip, userAgent, metadata: { updatedFields: Object.keys(authUp) },
+    }).catch(() => {});
+
+    return res.status(200).json({
+      success: true,
+      message: emailChanged
+        ? 'Profile updated. Please verify your new email address to reactivate your account.'
+        : 'Profile updated.',
+      ...(emailChanged && {
+        requiresEmailVerification: true,
+        newStatus: STATUS.PENDING,
+        hint: 'Check your new inbox for a verification link.',
+      }),
+    });
+
+  } catch (err) {
+    console.error('[updateProfileAdvanced]', err.message);
+    return res.status(500).json({ error: 'Failed to update profile.', code: 'PROFILE_UPDATE_FAILED' });
+  }
+};
+
+/* ══════════════════════════════════════════════════════════════
+   DELETE ACCOUNT
+   DELETE /api/users/account
+   Soft-deletes DB records, then hard-deletes Firebase Auth.
+══════════════════════════════════════════════════════════════ */
 export const deleteAccount = async (req, res) => {
   const uid       = req.uid;
   const ip        = getIp(req);
@@ -239,35 +251,35 @@ export const deleteAccount = async (req, res) => {
   const now       = new Date().toISOString();
 
   try {
-    // ── Soft-delete DB records first ──────────────────────────────
-    // (do this before Firebase Auth so we still have UID if something fails)
-    await adminDb.ref(`users/${uid}`).update({
-      'basic/status':    'deleted',
-      'basic/deletedAt': now,
-      'basic/updatedAt': now,
-    });
+    // Soft-delete DB first (preserves audit trail even if Auth delete fails)
+    await Promise.all([
+      adminDb.ref(`users/${uid}`).update({
+        'basic/status':    'deleted',
+        'basic/deletedAt': now,
+        'basic/updatedAt': now,
+      }),
+      admin.firestore().collection('users').doc(uid).update({
+        status:    'deleted',
+        deletedAt: now,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      }),
+    ]);
 
-    await adminFirestore.collection('users').doc(uid).update({
-      status:    'deleted',
-      deletedAt: now,
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-    });
+    // Bust Redis cache
+    const fbUser = await admin.auth().getUser(uid).catch(() => null);
+    if (fbUser?.email) await rDel(K.emailToUid(fbUser.email));
+    await rDel(K.profile(uid));
 
-    // ── Hard-delete Firebase Auth record ──────────────────────────
+    // Hard-delete Firebase Auth
     await admin.auth().deleteUser(uid);
 
-    // ── Clear session cookies ─────────────────────────────────────
-    const prod        = process.env.NODE_ENV === 'production';
-    const sessionName = prod ? '__Host-session' : '__session';
-    res.clearCookie(sessionName, { path: '/' });
-    res.clearCookie('__refresh',  { path: '/auth/refresh' });
-    res.clearCookie('__csrf',     { path: '/' });
+    // Clear session cookies
+    const prod = process.env.NODE_ENV === 'production';
+    res.clearCookie(prod ? '__Host-session' : '__session', { path: '/' });
+    res.clearCookie('__refresh', { path: '/auth/refresh' });
+    res.clearCookie('__csrf',    { path: '/' });
 
-    AuditLog.record(AuditLog.EVENTS.ACCOUNT_DELETED, {
-      userId:    uid,
-      ip,
-      userAgent,
-    }).catch(() => {});
+    AuditLog.record(AuditLog.EVENTS.ACCOUNT_DELETED, { userId: uid, ip, userAgent }).catch(() => {});
 
     return res.status(200).json({ success: true, message: 'Account deleted successfully.' });
 

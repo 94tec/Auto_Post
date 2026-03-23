@@ -20,9 +20,26 @@ import { getUserById } from '../models/user.js';
 import { ROLES, STATUS } from '../config/roles.js';
 
 /* ── Token extraction ────────────────────────────────────────────── */
+/**
+ * Priority order:
+ *  1. Authorization: Bearer <token>  — API clients, mobile, testing
+ *  2. __session signed cookie        — browser sessions after login
+ *
+ * The __session cookie value is stored as `<idToken>|<fingerprint>`.
+ * We split on '|' and take only the idToken part.
+ */
 const extractToken = (req) => {
+  // 1. Bearer header (REST clients, vscode-restclient, mobile)
   const h = req.headers.authorization || '';
-  return h.startsWith('Bearer ') ? h.slice(7) : null;
+  if (h.startsWith('Bearer ')) return h.slice(7);
+
+  // 2. Signed session cookie (browser)
+  const prod        = process.env.NODE_ENV === 'production';
+  const sessionName = prod ? '__Host-session' : '__session';
+  const cookie      = req.signedCookies?.[sessionName];
+  if (cookie) return cookie.split('|')[0]; // strip fingerprint suffix
+
+  return null;
 };
 
 /* ── verifyToken ─────────────────────────────────────────────────── */
@@ -149,8 +166,11 @@ export const requireRole = (...roles) => (req, res, next) => {
  * Admin-only guard.
  * Returns 404 to non-admins to obscure admin route existence.
  */
+ 
 export const requireAdmin = (req, res, next) => {
-  if (req.user?.basic?.role !== ROLES.ADMIN) {
+  const role = req.user?.basic?.role;
+  if (role !== ROLES.ADMIN) {
+    // 404 — don't reveal the route exists to non-admins
     return res.status(404).json({ error: 'Not found', code: 'NOT_FOUND' });
   }
   next();
