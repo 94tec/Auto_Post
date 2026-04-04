@@ -31,7 +31,7 @@ import { admin }                        from '../../config/firebase.js';
 import { ROLES, STATUS }                from '../../config/roles.js';
 import { validatePasswordStrength }     from '../../utils/validator.js';
 import { checkExistingUser }            from './userController.js';
-import { sendVerificationEmail }             from '../../services/emailService.js';
+import { sendVerificationEmail, sendWelcomeEmail }             from '../../services/emailService.js';
 import AuditLog                         from '../../services/auditLog.js';
 import {
   getIp, getUserAgent, validateEmailFormat,
@@ -152,9 +152,19 @@ export const register = async (req, res) => {
     /* 11. Release lock ─────────────────────────────────────────── */
     await rDel(lockKey);
 
-    /* 12. Verification email — fire-and-forget ────────────────── */
-    sendVerificationEmail({ email: normEmail, displayName: resolvedName })
-      .catch(err => console.error('[Register] Verification email failed:', err.message));
+    await sendVerificationEmail({
+    userId: firebaseUid,
+      email:  normEmail,
+      name:   resolvedName,
+      ip:     getIp(req),
+      req,
+    });
+
+    // 12. Send the welcome/onboarding email (explains what happens next)
+    sendWelcomeEmail({
+      email:       normEmail,
+      displayName: resolvedName,
+    }).catch(e => console.error('Welcome email failed (non-fatal):', e.message));
 
     /* 13. Audit log — fire-and-forget ─────────────────────────── */
     AuditLog.record(AuditLog.EVENTS.USER_REGISTERED, {

@@ -8,7 +8,7 @@
 //   - audit_log_flush      (batch-write audit logs to Firestore)
 //   - cache_warmup         (pre-fill cache after cold start)
 
-import redis from '../config/redis.js';
+import { getRedis, isRedisAlive } from '../config/redis.js';
 import { KEYS } from './cache.js';
 
 /* ── job definitions ────────────────────────────────────────── */
@@ -31,11 +31,12 @@ const DEAD_LETTER = 'queue:dead';
  * @param {string} queue   Queue name (default: 'default')
  */
 export const enqueue = async (type, payload = {}, queue = DEFAULT_Q) => {
-  if (!redis.isReady) {
+  if (!isRedisAlive()) {
     console.warn(`[Queue] Redis not ready — job ${type} dropped`);
     return null;
   }
   try {
+    const redis = getRedis();
     const job = {
       id:        `${type}:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`,
       type,
@@ -62,15 +63,15 @@ export const enqueue = async (type, payload = {}, queue = DEFAULT_Q) => {
  * @param {number}   maxRetries  Max retry attempts before dead-lettering
  */
 export const startWorker = async (handlers, queue = DEFAULT_Q, maxRetries = 3) => {
-  if (!redis.isReady) {
+  if (!isRedisAlive()) {
     console.warn('[Queue] Worker not started — Redis not ready');
     return;
   }
 
   console.log(`[Queue] Worker started on queue: ${queue}`);
 
-  // Use a second client for blocking operations so we don't block the main client
-  const workerClient = redis.duplicate();
+  // Create a duplicate client for blocking operations so we don't block the main client
+  const workerClient = getRedis().duplicate();
   await workerClient.connect();
 
   const process = async () => {
@@ -98,10 +99,12 @@ export const startWorker = async (handlers, queue = DEFAULT_Q, maxRetries = 3) =
           if (job.attempts < maxRetries) {
             // Re-queue with backoff delay (simple version: just re-push)
             job.lastError = err.message;
+            const redis = getRedis();
             await redis.lPush(QUEUE_KEY(queue), JSON.stringify(job));
             console.log(`[Queue] ↩️  Re-queued ${job.id} (attempt ${job.attempts}/${maxRetries})`);
           } else {
             // Dead-letter: save for inspection
+            const redis = getRedis();
             await redis.lPush(DEAD_LETTER, JSON.stringify({
               ...job,
               deadAt:    new Date().toISOString(),
@@ -123,16 +126,33 @@ export const startWorker = async (handlers, queue = DEFAULT_Q, maxRetries = 3) =
 };
 
 /* ── inspect ─────────────────────────────────────────────────── */
-export const getQueueLength  = (queue = DEFAULT_Q) =>
-  redis.isReady ? redis.lLen(QUEUE_KEY(queue)).catch(() => 0) : Promise.resolve(0);
-
-export const getDeadLetters  = async (count = 20) => {
-  if (!redis.isReady) return [];
+export const getQueueLength = async (queue = DEFAULT_Q) => {
+  if (!isRedisAlive()) return 0;
   try {
-    const items = await redis.lRange(DEAD_LETTER, 0, count - 1);
-    return items.map(i => JSON.parse(i));
-  } catch { return []; }
+    const redis = getRedis();
+    return await redis.lLen(QUEUE_KEY(queue));
+  } catch {
+    return 0;
+  }
 };
 
-export const clearDeadLetters = () =>
-  redis.isReady ? redis.del(DEAD_LETTER).catch(() => {}) : Promise.resolve();
+export const getDeadLetters = async (count = 20) => {
+  if (!isRedisAlive()) return [];
+  try {
+    const redis = getRedis();
+    const items = await redis.lRange(DEAD_LETTER, 0, count - 1);
+    return items.map(i => JSON.parse(i));
+  } catch {
+    return [];
+  }
+};
+
+export const clearDeadLetters = async () => {
+  if (!isRedisAlive()) return;
+  try {
+    const redis = getRedis();
+    await redis.del(DEAD_LETTER);
+  } catch {
+    // ignore
+  }
+};

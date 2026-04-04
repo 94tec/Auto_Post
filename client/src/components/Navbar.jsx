@@ -126,7 +126,7 @@ const Navbar = ({ activeSection='hero', onSectionClick, onContactOpen }) => {
 
           {user ? (
             <div className="flex items-center gap-2">
-              <motion.button whileHover={{ scale:1.02 }} onClick={() => navigate('/dashboard')}
+              <motion.button whileHover={{ scale:1.02 }} onClick={() => navigate('/profile')}
                 className="hidden sm:flex items-center gap-2 pl-1.5 pr-3 py-1 rounded-xl text-[13px] font-medium bg-white/8 hover:bg-white/15 text-white border border-white/10 transition-all">
                 <div className="relative w-6 h-6 rounded-lg flex items-center justify-center text-gray-950 text-[11px] font-black"
                      style={{ background:`linear-gradient(135deg,${ACCENT},${ACCENT2})` }}>

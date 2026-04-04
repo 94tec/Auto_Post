@@ -454,12 +454,15 @@ export const suspendUser = async (req, res) => {
       userId: myUid(req), ip: getIp(req), userAgent: getUserAgent(req),
       metadata: { targetUid: uid },
     });
+    await revokeUserSession(uid, 'account_suspended').catch(e =>
+      console.warn('[suspend] Session revoke non-fatal:', e.message)
+    );
     return res.status(200).json({ success: true, message: `User ${uid} suspended.` });
   } catch (err) {
     return res.status(500).json({ error: err.message, code: 'SUSPEND_FAILED' });
   }
 };
-
+  
 export const reactivateUser = async (req, res) => {
   const { uid } = req.params;
   try {
@@ -521,5 +524,57 @@ export const getStats = async (req, res) => {
     return res.status(200).json({ stats });
   } catch (err) {
     return res.status(500).json({ error: 'Failed to fetch stats', code: 'SERVER_ERROR' });
+  }
+};
+/**
+ * POST /api/admin/users/:uid/revoke-session
+ * Force-logs out a user from all devices.
+ * Admin only.
+ */
+export const revokeSessionHandler = async (req, res) => {
+  const { uid }    = req.params;
+  const adminUid   = req.user?.uid;
+ 
+  if (!uid) {
+    return res.status(400).json({ error: 'UID required', code: 'MISSING_UID' });
+  }
+ 
+  try {
+    // Get target user
+    const fbUser = await admin.auth().getUser(uid);
+ 
+    // Don't revoke your own session
+    if (uid === adminUid) {
+      return res.status(400).json({
+        error: 'Cannot revoke your own session',
+        code:  'SELF_ACTION',
+      });
+    }
+ 
+    // Don't revoke another admin (unless you're a super admin — adjust as needed)
+    const rtdbSnap = await adminDb.ref(`users/${uid}/basic/role`).get();
+    if (rtdbSnap.val() === 'admin') {
+      return res.status(403).json({
+        error: 'Cannot revoke another admin\'s session',
+        code:  'FORBIDDEN',
+      });
+    }
+ 
+    await revokeUserSession(uid, `force_logout_by_admin_${adminUid}`);
+ 
+    // Audit log
+    AuditLog.record('SESSION_FORCE_REVOKED', {
+      userId:   adminUid,
+      metadata: { targetUid: uid, targetEmail: fbUser.email },
+    }).catch(() => {});
+ 
+    return res.status(200).json({
+      success: true,
+      message: `Session for ${fbUser.email} has been revoked. They will be signed out within 60 seconds.`,
+    });
+ 
+  } catch (err) {
+    console.error('[revokeSession] Error:', err.message);
+    return res.status(500).json({ error: 'Failed to revoke session', code: 'SERVER_ERROR' });
   }
 };

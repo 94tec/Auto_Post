@@ -270,8 +270,7 @@ export const userApi = {
     POST('/users/change-password', { newPassword }),
 
   /** PATCH /api/users/profile */
-  updateProfile: ({ displayName }) =>
-    PATCH('/users/profile', { displayName }),
+  updateProfile: (data) => PATCH('/users/profile', data),
 
   /** PATCH /api/users/profile-advanced (email or displayName change) */
   updateProfileAdvanced: ({ displayName, email }) =>
@@ -280,4 +279,8 @@ export const userApi = {
   /** DELETE /api/users/account */
   deleteAccount: () =>
     request('/users/account', { method: 'DELETE' }),
+
+  getProfile: () => GET('/users/profile'),
+
+  requestEmailChange: (newEmail) => POST('/users/request-email-change', { newEmail }),
 };

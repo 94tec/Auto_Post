@@ -17,10 +17,13 @@
 
 import crypto   from 'crypto';
 import { UAParser } from 'ua-parser-js';  // npm install ua-parser-js
-import redis       from '../config/redis.js';
+import {
+  getIp, getUserAgent, mapFirebaseError,
+  rGet, rSet, rDel, K, TTL,
+} from '../controllers/auth/authHelpers.js'; // re-use request helpers and Redis utils
 
 /* ── Safe Redis helper ───────────────────────────────────────── */
-const rSet = async (k, v, ttl) => { try { await redis.setEx(k, ttl, v); } catch { /* ignore */ } };
+// const rSet = async (k, v, ttl) => { try { await redis.setEx(k, ttl, v); } catch { /* ignore */ } };
 
 /* ══════════════════════════════════════════════════════════════
    HTTP SECURITY HEADERS

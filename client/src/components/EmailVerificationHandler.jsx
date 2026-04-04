@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { CheckCircle, XCircle, Clock, RotateCw, AlertTriangle, RefreshCw } from 'lucide-react';
 import { Toaster, toast } from 'react-hot-toast';
+import { authApi } from '../utils/api';
 import '../assets/glow.css';
 
 const ACCENT_GRADIENT = 'from-[#F59E0B] to-[#F97316]';
@@ -11,7 +12,7 @@ const ACCENT_GRADIENT = 'from-[#F59E0B] to-[#F97316]';
 export default function EmailVerificationHandler() {
   const searchParams = new URLSearchParams(window.location.search);
   const navigate = useNavigate();
-  const [status, setStatus] = useState('verifying'); // verifying, success, expired, error
+  const [status, setStatus] = useState('verifying'); // verifying, success, expired, error, alreadyVerified
   const [error, setError] = useState('');
   const oobCode = decodeURIComponent(searchParams.get('oobCode') || '');
   const email = decodeURIComponent(searchParams.get('email') || '');
@@ -24,39 +25,17 @@ export default function EmailVerificationHandler() {
     const isProcessing = sessionStorage.getItem(verificationKey);
     const verifyEmail = async () => {
       if (isProcessing || isVerified || hasVerified) return;
-      sessionStorage.setItem(verificationKey, 'true')
-     
+      sessionStorage.setItem(verificationKey, 'true');
+
       try {
         if (!oobCode || !email || !uid) {
           throw new Error('The verification link is incomplete. Please use the full link from your email.');
         }
 
-        const res = await fetch("/api/verify-email-link", {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-           body: JSON.stringify({ 
-            oobCode,
-            uid,
-            email,
-            isFromFrontend: true
-          }),
-        });
+        // Use the API client instead of raw fetch
+        const data = await authApi.verifyEmail({ oobCode, uid, email });
 
-        const data = await res.json();
-        if (res.status === 409) {
-          return;
-        }
-
-        if (!res.ok) {
-          if (data.code === 'TOKEN_CONSUMED') {
-            throw new Error('This verification link has already been used.');
-          } else if (data.code === 'INVALID_TOKEN') {
-            throw new Error('The verification link is invalid.');
-          }
-          throw new Error(data.userMessage || data.error || 'Verification failed');
-        }
+        // Handle success responses
         if (data.alreadyVerified) {
           setStatus('alreadyVerified');
           return;
@@ -65,15 +44,26 @@ export default function EmailVerificationHandler() {
         setStatus('success');
         setHasVerified(true);
       } catch (err) {
-        console.error('Verification error:', err.message);
-        setStatus('error');
-        setError(err.message);
-        
-        if (err.message.includes('expired') || err.message.includes('invalid')) {
+        console.error('Verification error:', err.message, err.code);
+        // Map error codes to user‑friendly messages
+        if (err.code === 'TOKEN_CONSUMED') {
+          setStatus('expired');
+          setError('This verification link has already been used.');
+        } else if (err.code === 'TOKEN_EXPIRED') {
           setStatus('expired');
           setError('The verification link has expired. Please request a new one.');
+        } else if (err.code === 'INVALID_TOKEN') {
+          setStatus('error');
+          setError('The verification link is invalid.');
+        } else if (err.code === 'VERIFY_FAILED') {
+          setStatus('error');
+          setError(err.error || 'Verification failed. Please try again.');
         } else if (err.message.includes('user not found')) {
+          setStatus('error');
           setError('No account found with this email address.');
+        } else {
+          setStatus('error');
+          setError(err.error || err.message || 'Verification failed');
         }
       } finally {
         sessionStorage.removeItem(verificationKey);
@@ -262,14 +252,11 @@ export default function EmailVerificationHandler() {
                 className="text-center space-y-3"
               >
                 <p className="text-gray-400">
-                  The verification link contains invalid characters.
+                  {error || 'The verification link is invalid or has expired.'}
                 </p>
                 <div className="px-4 py-2 bg-amber-900/30 rounded-lg border border-amber-800/50 text-amber-200 text-sm font-mono">
-                  {error.includes('@') ? error : 'Invalid email format detected'}
-                </div>
-                <p className="text-gray-500 text-sm">
                   Please request a new verification email.
-                </p>
+                </div>
               </motion.div>
               <motion.div 
                 className="w-full space-y-3"

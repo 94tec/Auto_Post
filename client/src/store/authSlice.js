@@ -93,19 +93,23 @@ const authSlice = createSlice({
     loading:       true,          // true until first auth state resolved
     roleLoading:   false,
     error:         null,
+    authInitialized: false,         // becomes true after first auth state change (even if user is null) — used to prevent flashing "Sign In" on app load while Firebase Auth checks local storage
   },
   reducers: {
     setUser(state, { payload }) {
       state.user    = payload;
       state.loading = false;
       if (!payload) {
-        // Signed out — reset everything
-        state.role          = ROLES.GUEST;
-        state.emailVerified = false;
-        state.adminApproved = false;
-        state.status        = 'pending';
+        // Signed out — reset everything and mark initialized immediately
+        // (no role fetch needed when there's no user)
+        state.role               = ROLES.GUEST;
+        state.emailVerified      = false;
+        state.adminApproved      = false;
+        state.status             = 'pending';
         state.mustChangePassword = false;
-        state.error         = null;
+        state.error              = null;
+        state.roleLoading        = false;
+        state.authInitialized    = true;
       }
     },
     setLoading(state, { payload }) {
@@ -118,27 +122,29 @@ const authSlice = createSlice({
   extraReducers: (builder) => {
     builder
       .addCase(fetchUserRole.pending, (state) => {
-        state.roleLoading = true;
-        state.error       = null;
+        state.roleLoading     = true;
+        state.authInitialized = false;
+        state.error           = null;
       })
       .addCase(fetchUserRole.fulfilled, (state, { payload }) => {
-        // payload is now a full profile object { role, emailVerified, adminApproved, status, mustChangePassword, ... }
-        state.role          = payload.role ?? ROLES.USER;
-        state.emailVerified = payload.emailVerified ?? false;
-        state.adminApproved = payload.adminApproved ?? false;
-        state.status        = payload.status ?? 'pending';
+        state.role               = payload.role               ?? ROLES.USER;
+        state.emailVerified      = payload.emailVerified      ?? false;
+        state.adminApproved      = payload.adminApproved      ?? false;
+        state.status             = payload.status             ?? 'pending';
         state.mustChangePassword = payload.mustChangePassword ?? false;
-        state.roleLoading   = false;
-
-        // Merge DB display name into user if Firebase Auth didn't have it
+        state.roleLoading        = false;
+        state.authInitialized    = true; // ← both checks done, safe to route
+ 
         if (state.user && payload.displayName && !state.user.displayName) {
           state.user.displayName = payload.displayName;
         }
       })
       .addCase(fetchUserRole.rejected, (state, { payload }) => {
-        state.role        = ROLES.USER;
-        state.roleLoading = false;
-        state.error       = payload;
+        // Always set initialized even on failure — app must not hang forever
+        state.role            = ROLES.USER;
+        state.roleLoading     = false;
+        state.authInitialized = true;
+        state.error           = payload;
       });
   },
 });
@@ -155,5 +161,6 @@ export const selectStatus        = (s) => s.auth.status;
 export const selectMustChangePassword = (s) => s.auth.mustChangePassword;
 export const selectAuthLoading   = (s) => s.auth.loading;
 export const selectRoleLoading   = (s) => s.auth.roleLoading;
+export const selectAuthInitialized    = (s) => s.auth.authInitialized;
 export const selectIsAdmin       = (s) => s.auth.role === ROLES.ADMIN;
 export const selectIsGuest       = (s) => s.auth.role === ROLES.GUEST;

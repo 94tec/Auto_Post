@@ -60,6 +60,8 @@ export const getQuote = async (req, res) => {
 
 /* ── GET my quotes ───────────────────────────────────────────── */
 export const getMyQuotes = async (req, res) => {
+  console.log('req.uid:', req.uid);  // add this
+  console.log('req.user:', req.user);
   try {
     const cacheKey = KEYS.userQuotes(req.uid);
 

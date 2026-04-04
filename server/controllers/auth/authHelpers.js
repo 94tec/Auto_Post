@@ -18,7 +18,7 @@
 
 import { admin, adminDb } from '../../config/firebase.js';
 import { ROLES, STATUS }  from '../../config/roles.js';
-import redis              from '../../config/redis.js';
+import { isRedisAlive, getRedis } from '../../config/redis.js';
 
 /* ── Request helpers ─────────────────────────────────────────── */
 export const getIp = (req) =>
@@ -49,23 +49,38 @@ export const K = {
 
 /* ── Safe Redis helpers — never throw ────────────────────────── */
 export const rGet = async (key) => {
-  try { return await redis.get(key); }
-  catch { return null; }
+  if (!isRedisAlive()) return null;
+  try {
+    const redis = getRedis();
+    return await redis.get(key);
+  } catch { return null; }
 };
 
 export const rSet = async (key, value, ttlSeconds) => {
-  try { await redis.setEx(key, ttlSeconds, value); }
-  catch (err) { console.warn(`[Redis] rSet ${key}:`, err.message); }
+  if (!isRedisAlive()) return;
+  try {
+    const redis = getRedis();
+    await redis.set(key, value, { EX: ttlSeconds }); // ✅ v4 API
+  } catch (err) {
+    console.warn(`[Redis] rSet ${key}:`, err.message);
+  }
 };
 
 export const rDel = async (key) => {
-  try { await redis.del(key); }
-  catch (err) { console.warn(`[Redis] rDel ${key}:`, err.message); }
+  if (!isRedisAlive()) return;
+  try {
+    const redis = getRedis();
+    await redis.del(key);
+  } catch (err) {
+    console.warn(`[Redis] rDel ${key}:`, err.message);
+  }
 };
 
 /** SET NX — returns truthy if acquired, null if key already exists */
 export const rSetNX = async (key, value, ttlSeconds) => {
+  if (!isRedisAlive()) return null;
   try {
+    const redis = getRedis();
     return await redis.set(key, value, { NX: true, EX: ttlSeconds });
   } catch {
     return null;

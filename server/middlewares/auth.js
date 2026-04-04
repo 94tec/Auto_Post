@@ -28,7 +28,7 @@ import { ROLES, STATUS } from '../config/roles.js';
  * The __session cookie value is stored as `<idToken>|<fingerprint>`.
  * We split on '|' and take only the idToken part.
  */
-const extractToken = (req) => {
+export const extractToken = (req) => {
   // 1. Bearer header (REST clients, vscode-restclient, mobile)
   const h = req.headers.authorization || '';
   if (h.startsWith('Bearer ')) return h.slice(7);

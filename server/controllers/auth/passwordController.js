@@ -15,6 +15,8 @@ import { validatePasswordStrength } from '../../utils/validator.js';
 import { sendPasswordResetEmail }   from '../../services/emailService.js';
 import AuditLog                     from '../../services/auditLog.js';
 import { getIp, getUserAgent, mapFirebaseError } from './authHelpers.js';
+import { revokeUserSession } from '../../utils/sessionRevoke.js';
+
 
 /* ══════════════════════════════════════════════════════════════
    FORGOT PASSWORD
@@ -161,6 +163,8 @@ export const resetPassword = async (req, res) => {
     /* Revoke all sessions (invalidates all existing tokens) */
     const fbUser = await admin.auth().getUserByEmail(email);
     await admin.auth().revokeRefreshTokens(fbUser.uid);
+
+    await revokeUserSession(fbUser.uid, 'password_reset');
 
     /* Record timestamp */
     adminDb.ref(`users/${fbUser.uid}/security`).update({

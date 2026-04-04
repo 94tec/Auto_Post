@@ -17,7 +17,8 @@ import {
   selectEmailVerified,
   selectAdminApproved,
   selectStatus,
-  selectMustChangePassword
+  selectMustChangePassword,
+  selectAuthInitialized,
 } from '../store/authSlice';
 
 const AuthContext = createContext();
@@ -31,6 +32,7 @@ export const AuthProvider = ({ children }) => {
   const reduxAdminApproved = useSelector(selectAdminApproved);
   const reduxStatus        = useSelector(selectStatus);
   const reduxMustChangePassword = useSelector(selectMustChangePassword);
+  const authInitialized         = useSelector(selectAuthInitialized);
 
   const [baseUser, setBaseUser] = useState(null); // raw Firebase Auth fields
   const [loading,  setLoading]  = useState(true);
@@ -52,11 +54,12 @@ export const AuthProvider = ({ children }) => {
         await dispatch(fetchUserRole(firebaseUser.uid));
         setRoleFetched(true); 
       } else {
-        setBaseUser(null);
+        setBaseUser(null); 
         setRoleFetched(false);
-        setLoading(false);
+        //setLoading(false);
         dispatch(reduxSetUser(null));
       }
+      setLoading(false);
     });
 
     return unsub;
@@ -86,7 +89,7 @@ export const AuthProvider = ({ children }) => {
 
   return (
     <AuthContext.Provider value={{
-      user, loading, logout,
+      user, loading, authInitialized,logout,
       setUser: setBaseUser,
       roleReady,
     }}>

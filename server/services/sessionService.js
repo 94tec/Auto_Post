@@ -5,7 +5,8 @@
 //
 // Session TTL = 7 days (refreshed on each active request).
 
-import redis from '../config/redis.js';
+import { isRedisAlive, getRedis } from '../config/redis.js';
+import { rDel, rGet } from '../controllers/auth/authHelpers.js';
 import { KEYS } from './cache.js';
 
 const SESSION_TTL = 60 * 60 * 24 * 7; // 7 days in seconds
@@ -16,7 +17,7 @@ const SESSION_TTL = 60 * 60 * 24 * 7; // 7 days in seconds
  * @param {object} metadata  { email, displayName, role, ip, userAgent }
  */
 export const createSession = async (uid, metadata = {}) => {
-  if (!redis.isReady) return null;
+  if (!isRedisAlive()) return null;
   try {
     const session = {
       uid,
@@ -28,7 +29,7 @@ export const createSession = async (uid, metadata = {}) => {
       createdAt:   new Date().toISOString(),
       lastActive:  new Date().toISOString(),
     };
-    await redis.setEx(KEYS.userSession(uid), SESSION_TTL, JSON.stringify(session));
+    await getRedis().setEx(KEYS.userSession(uid), SESSION_TTL, JSON.stringify(session));
     return session;
   } catch (err) {
     console.error('[Session] createSession error:', err.message);
@@ -41,9 +42,9 @@ export const createSession = async (uid, metadata = {}) => {
  * Returns null if session doesn't exist or Redis is down.
  */
 export const getSession = async (uid) => {
-  if (!redis.isReady) return null;
+  if (!isRedisAlive()) return null;
   try {
-    const raw = await redis.get(KEYS.userSession(uid));
+    const raw = await getRedis().get(KEYS.userSession(uid));
     return raw ? JSON.parse(raw) : null;
   } catch (err) {
     console.error('[Session] getSession error:', err.message);
@@ -56,13 +57,13 @@ export const getSession = async (uid) => {
  * Call this on every authenticated request.
  */
 export const refreshSession = async (uid) => {
-  if (!redis.isReady) return;
+  if (!isRedisAlive()) return;
   try {
-    const raw = await redis.get(KEYS.userSession(uid));
+    const raw = await getRedis().get(KEYS.userSession(uid));
     if (!raw) return;
     const session = JSON.parse(raw);
     session.lastActive = new Date().toISOString();
-    await redis.setEx(KEYS.userSession(uid), SESSION_TTL, JSON.stringify(session));
+    await getRedis().setEx(KEYS.userSession(uid), SESSION_TTL, JSON.stringify(session));
   } catch (err) {
     console.error('[Session] refreshSession error:', err.message);
   }
@@ -72,9 +73,9 @@ export const refreshSession = async (uid) => {
  * Destroy session on logout.
  */
 export const destroySession = async (uid) => {
-  if (!redis.isReady) return;
+  if (!isRedisAlive()) return;
   try {
-    await redis.del(KEYS.userSession(uid));
+    await rDel(KEYS.userSession(uid));
   } catch (err) {
     console.error('[Session] destroySession error:', err.message);
   }
@@ -85,9 +86,9 @@ export const destroySession = async (uid) => {
  * Always calls next() — session is enrichment, not a gate.
  */
 export const attachSession = async (req, res, next) => {
-  if (req.uid && redis.isReady) {
+  if (req.uid && isRedisAlive()) {
     try {
-      const raw = await redis.get(KEYS.userSession(req.uid));
+      const raw = await rGet(KEYS.userSession(req.uid));
       req.session = raw ? JSON.parse(raw) : null;
       // Silently refresh TTL in background (fire and forget)
       if (req.session) refreshSession(req.uid).catch(() => {});

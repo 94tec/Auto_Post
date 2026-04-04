@@ -25,9 +25,8 @@
  * so the frontend can map accurately without guessing.
  * ═══════════════════════════════════════════════════════════════
  */
-
+import crypto from 'crypto';
 import axios              from 'axios';
-import crypto             from 'crypto';
 import { admin, adminDb } from '../../config/firebase.js';
 import { STATUS, ROLES }  from '../../config/roles.js';
 import { getUserById }    from '../../models/user.js';
@@ -233,6 +232,16 @@ export const login = async (req, res) => {
     /* ── 10. Record login ─────────────────────────────────── */
     recordLogin(localId, ip); // fire-and-forget
 
+   // Optional: store session metadata in Redis as well
+    await rSet(`session:${localId}`, JSON.stringify({
+      userId:           localId,
+      email:            normEmail,
+      ip,
+      userAgent,
+      createdAt:        Date.now(),
+      mustChangePassword,
+    }), 60 * 60 * 24); // 24 h expiration
+
     /* ── 11. Session cookies ──────────────────────────────── */
     setSessionCookies(res, { idToken, refreshToken, userAgent });
 
@@ -245,6 +254,7 @@ export const login = async (req, res) => {
       ip,
       userAgent,
       metadata:  { email: normEmail, status: basic.status, role: basic.role, mustChangePassword },
+    
     }).catch(() => {});
 
     /* ── Response ─────────────────────────────────────────── */

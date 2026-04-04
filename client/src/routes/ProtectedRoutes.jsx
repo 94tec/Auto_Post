@@ -1,32 +1,64 @@
+// routes/ProtectedRoute.jsx
+import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Navigate } from 'react-router-dom';
-import PropTypes from 'prop-types';
+import LoadingSpinner from '../components/LoadingSpinner';
 
-const ProtectedRoute = ({ children, redirectPath = '/login', showLoading = true }) => {
-  const { currentUser, loading } = useAuth();
+/**
+ * ProtectedRoute
+ * Waits for authInitialized before making ANY redirect decision.
+ * This eliminates the race condition where routes render before
+ * Firebase + RTDB have resolved the user's role.
+ *
+ * Props:
+ *   children        — page to render when access is granted
+ *   requireAdmin    — true → only role=admin passes
+ *   requireApproved — false → skip adminApproved check (default true)
+ */
+const ProtectedRoute = ({
+  children,
+  requireAdmin    = false,
+  requireApproved = true,
+}) => {
+  const { user, loading, authInitialized } = useAuth();
+  const location = useLocation();
 
-  if (loading) {
-    return showLoading ? (
-      <div className="flex justify-center items-center min-h-screen">
-        <div className="animate-pulse flex flex-col items-center">
-          <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full mb-4"></div>
-          <p className="text-gray-600">Authenticating...</p>
-        </div>
-      </div>
-    ) : null;
+  // ── Still initialising — make NO routing decision yet ──────────
+  if (loading || !authInitialized) {
+    return <LoadingSpinner fullScreen />;
   }
 
-  if (!currentUser) {
-    return <Navigate to={redirectPath} replace state={{ from: location }} />;
+  // ── Not logged in ───────────────────────────────────────────────
+  if (!user) {
+    return (
+      <Navigate
+        to="/auth/login"
+        state={{ from: location }}
+        replace
+      />
+    );
+  }
+
+  // ── Must change temporary password ─────────────────────────────
+  if (user.mustChangePassword) {
+    return <Navigate to="/auth/change-password" replace />;
+  }
+
+  // ── Email not verified ──────────────────────────────────────────
+  if (!user.emailVerified) {
+    return <Navigate to="/auth/verify-pending" replace />;
+  }
+
+  // ── Verified but not admin-approved ────────────────────────────
+  if (requireApproved && !user.adminApproved) {
+    return <Navigate to="/guest" replace />;
+  }
+
+  // ── Admin-only route ────────────────────────────────────────────
+  if (requireAdmin && user.role !== 'admin') {
+    return <Navigate to="/" replace />;
   }
 
   return children;
-};
-
-ProtectedRoute.propTypes = {
-  children: PropTypes.node.isRequired,
-  redirectPath: PropTypes.string,
-  showLoading: PropTypes.bool,
 };
 
 export default ProtectedRoute;

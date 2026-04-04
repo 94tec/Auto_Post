@@ -26,10 +26,10 @@ import {
   listUsers, getUserDetail,
   grantWrite, revokeWrite, patchPermissions,
   suspendUser, reactivateUser,
-  getPendingWriteAccess,
+  getPendingWriteAccess, revokeSessionHandler,
   getAuditLogs, getStats,
 }                       from '../controllers/auth/adminController.js';
-import { verifyToken, requireAdmin } from '../middlewares/auth.js';
+import { verifyToken, extractToken, requireAdmin } from '../middlewares/auth.js';
 import { apiLimiter }          from '../middlewares/rateLimiter.js';
 
 const router = Router();
@@ -64,5 +64,10 @@ router.patch('/users/:uid/permissions', patchPermissions);
 // ── Account status ────────────────────────────────────────────────
 router.post('/users/:uid/suspend',    suspendUser);
 router.post('/users/:uid/reactivate', reactivateUser);
+
+router.post('/users/:uid/revoke-session',
+     extractToken, verifyToken, requireAdmin,
+     revokeSessionHandler
+);
 
 export default router;

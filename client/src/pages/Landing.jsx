@@ -189,10 +189,14 @@ const Landing = () => {
 
   const scrollTo = (id) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
-  /* data */
+  // role-aware fetching ────────
+
+  // Admins see all quotes; regular users see only their own
   const { data, isLoading } = useQuery({
-    queryKey: ['quotes'],
-    queryFn:  () => quotesApi.getAll(),
+    queryKey: isAdmin ? ['quotes'] : ['quotes', 'my', user?.uid],
+    queryFn:  isAdmin
+      ? () => quotesApi.getAll()
+      : () => quotesApi.getMy(),   // → GET /api/quotes/my
     staleTime: 60_000,
     enabled: !!user,
   });
@@ -628,7 +632,7 @@ const Landing = () => {
                    style={{background:`linear-gradient(135deg,${ACCENT},${ACCENT2})`,color:NAVY}}>D</div>
               <span className="font-extrabold text-[15px] text-white">Damu<span style={{color:ACCENT}}>chi</span></span>
             </div>
-            <p className="text-[11px] text-white/20">© {new Date().getFullYear()} Damuchi · Built with purpose in Nairobi 🇰🇪</p>
+            <p className="text-[11px] text-white/20">© {new Date().getFullYear()} Damuchi · Built with purpose 🇰🇪</p>
             <div className="flex items-center gap-4">
               {[{href:'/docs',l:'Docs'},{href:'https://twitter.com/damuchiapp',l:'X'},{href:'/dashboard',l:'Dashboard'}].map(({href,l})=>(
                 <a key={l} href={href} className="text-[11px] text-white/30 hover:text-white/65 transition-colors">{l}</a>

@@ -1,52 +1,95 @@
 // config/redis.js
-// node-redis v4 — Redis Cloud connection using host + password env vars
-//
-// Required .env vars:
-//   REDIS_CLOUD_HOST=your-host.redis.cloud
-//   REDIS_CLOUD_PORT=11784          (or whatever port Redis Cloud assigned)
-//   REDIS_PASSWORD=your-password
-
 import { createClient } from 'redis';
 
-const client = createClient({
-  username: 'default',
-  password: process.env.REDIS_PASSWORD,
-  socket: {
-    host: process.env.REDIS_CLOUD_HOST,
-    port: Number(process.env.REDIS_CLOUD_PORT) || 11784,
-    tls:  false,                          // Redis Cloud requires TLS
-    reconnectStrategy: (retries) => {
-      if (retries > 10) {
-        console.error('[Redis] Max reconnection attempts reached');
-        return new Error('[Redis] Max retries exceeded');
-      }
-      // Exponential backoff: 100ms → 200ms → 400ms … capped at 5s
-      return Math.min(retries * 100, 5000);
-    },
-  },
-});
+let client = null;
+let isRedisReady = false;
 
-client.on('connect',      () => console.log('[Redis] Connected'));
-client.on('ready',        () => console.log('[Redis] Ready'));
-client.on('error',  (err) => console.error('[Redis] Error:', err.message));
-client.on('reconnecting', () => console.log('[Redis] Reconnecting…'));
-client.on('end',          () => console.log('[Redis] Connection closed'));
+const createRedisClient = () => {
+  return createClient({
+    username: 'default',
+    password: process.env.REDIS_PASSWORD,
+    socket: {
+      host: process.env.REDIS_CLOUD_HOST,
+      port: Number(process.env.REDIS_CLOUD_PORT) || 11784,
+      tls: false,
+
+      reconnectStrategy: (retries) => {
+        if (retries > 10) {
+          console.error('[Redis] Max reconnection attempts reached');
+          return new Error('Max retries exceeded');
+        }
+        return Math.min(retries * 100, 5000);
+      },
+    },
+  });
+};
 
 /**
- * Call once at server startup — before app.listen().
- * Fails gracefully: logs error and continues if Redis is unavailable.
+ * Initialize Redis connection ONCE at startup
  */
 export const connectRedis = async () => {
   try {
+    client = createRedisClient();
+
+    client.on('connect', () => console.log('[Redis] Connecting...'));
+    client.on('ready', () => {
+      console.log('[Redis] ✅ Ready');
+      isRedisReady = true;
+    });
+
+    client.on('error', (err) => {
+      console.error('[Redis] ❌ Error:', err.message);
+      isRedisReady = false;
+    });
+
+    client.on('reconnecting', () => {
+      console.warn('[Redis] Reconnecting...');
+      isRedisReady = false;
+    });
+
+    client.on('end', () => {
+      console.warn('[Redis] Connection closed');
+      isRedisReady = false;
+    });
+
     await client.connect();
-    // Smoke test: confirm read/write works
+
+    // ✅ Smoke test
     await client.set('ping', 'pong', { EX: 10 });
     const pong = await client.get('ping');
+
     console.log(`[Redis] Smoke test: ${pong === 'pong' ? '✅ OK' : '❌ Failed'}`);
+
   } catch (err) {
     console.error('[Redis] Initial connection failed:', err.message);
-    // App continues without Redis — all cache/rate-limit ops degrade gracefully
+    isRedisReady = false;
   }
 };
 
-export default client;
+/**
+ * Safe getter — NEVER export raw client directly
+ */
+export const getRedis = () => {
+  if (!client || !client.isOpen || !isRedisReady) {
+    throw new Error('Redis not available');
+  }
+  return client;
+};
+
+/**
+ * Safe wrapper — prevents crashes
+ */
+export const safeRedis = async (operation) => {
+  try {
+    const redis = getRedis();
+    return await operation(redis);
+  } catch (err) {
+    console.warn('[Redis Fallback]', err.message);
+    return null; // graceful fallback
+  }
+};
+
+/**
+ * Health check flag
+ */
+export const isRedisAlive = () => isRedisReady;
