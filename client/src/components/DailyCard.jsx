@@ -18,6 +18,7 @@ import {
 import { toast } from 'react-hot-toast';
 import useRole from '../hooks/useRole';
 import { ROLES } from '../store/authSlice';
+import { lyricsApi } from '../utils/api.js';
 
 /* ── helpers ──────────────────────────────────────────────── */
 const getDaySuffix = (d) =>
@@ -108,14 +109,9 @@ const DailyCard = ({ onContactOpen, onAddLyric }) => {
   const intervalRef = useRef(null);
   const resumeRef   = useRef(null);
 
-  /* ── Fetch lyrics from API ──────────────────────────────── */
-  const { data } = useQuery({
+  const { data, refetch } = useQuery({
     queryKey: ['lyrics'],
-    queryFn:  async () => {
-      const res = await fetch('/api/lyrics');
-      if (!res.ok) throw new Error('Failed to load lyrics');
-      return res.json();
-    },
+    queryFn: lyricsApi.getAll,
     staleTime: 5 * 60_000,
   });
   const lyrics = data?.lyrics?.length ? data.lyrics : FALLBACK_LYRICS;
@@ -180,6 +176,7 @@ const DailyCard = ({ onContactOpen, onAddLyric }) => {
   ];
 
   return (
+    // Main phone container with entry animation
     <motion.div
       initial={{ opacity: 0, scale: 0.92, y: 20 }}
       animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -205,12 +202,12 @@ const DailyCard = ({ onContactOpen, onAddLyric }) => {
           {/* status bar */}
           <div className="flex items-center justify-between px-1">
             <span className="text-[10px] font-semibold text-white/60">{dateLabel.time}</span>
-            <div className="w-20 h-5 rounded-full bg-black/60 flex items-center justify-center gap-2 border border-white/8">
+            <div className="w-20 h-5 rounded-full bg-black/60 flex items-center justify-center gap-2 border border-white/8 ml-4">
               <div className="w-1.5 h-1.5 rounded-full bg-white/30" />
               <div className="w-1 h-1 rounded-full bg-white/20" />
             </div>
             <div className="flex items-center gap-1.5">
-              <Signal bars={4} />
+              {/*<Signal bars={0.5} />*/} 
               <FiWifi size={10} className="text-white/55" />
               <Battery pct={battery} />
             </div>

@@ -7,6 +7,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { FiX, FiMusic, FiUser, FiTag, FiPlus, FiRefreshCw } from 'react-icons/fi';
 import toast from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
+import { lyricsApi } from '../utils/api.js';
 
 const ACCENT  = '#F59E0B';
 const ACCENT2 = '#F97316';
@@ -46,35 +47,22 @@ const AddLyricModal = ({ isOpen, onClose, onSuccess }) => {
     return Object.keys(e).length === 0;
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!validate()) return;
+ const handleSubmit = async (e) => {
+  e.preventDefault();
+  if (!validate()) return;
     setSaving(true);
     try {
-      const { auth } = await import('../config/firebase');
-      const token = await auth.currentUser?.getIdToken();
-      const res = await fetch('/api/lyrics', {
-        method:  'POST',
-        headers: {
-          'Content-Type':  'application/json',
-          Authorization:   `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          text:   form.text.trim(),
-          artist: form.artist.trim(),
-          genre:  form.genre,
-        }),
+      await lyricsApi.create({
+        text: form.text.trim(),
+        artist: form.artist.trim(),
+        genre: form.genre,
       });
-      if (!res.ok) {
-        const d = await res.json();
-        throw new Error(d.error || 'Failed to save');
-      }
       toast.success('Lyric added to phone display!');
       setForm({ text: '', artist: '', genre: 'motivation' });
       onSuccess?.();
       onClose();
     } catch (err) {
-      toast.error(err.message);
+      toast.error(err.message || 'Failed to save');
     } finally {
       setSaving(false);
     }
