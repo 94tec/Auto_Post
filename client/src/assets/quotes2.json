@@ -1,0 +1,62 @@
+[
+  {
+    "id": "1a2b3c4d-5e6f-7a89-b012-345cdef67890",
+    "text": "We walk away from our dreams afraid we may fail—or worse, afraid we may succeed.",
+    "author": "William Forrester, *Finding Forrester*",
+    "category": "courage"
+  },
+  {
+    "id": "2b3c4d5e-6f7a-8b90-c123-456def789012",
+    "text": "You know how everyone's always saying, 'Seize the moment'? I don't know—I’m kinda thinkin' it's the other way. Like the moment seizes us.",
+    "author": "Unknown, *Anonymous Movie/Article*",
+    "category": "perspective"
+  },
+  {
+    "id": "3c4d5e6f-7a8b-90c1-d234-567ef8901234",
+    "text": "Fear is the mind-killer. I must not fear.",
+    "author": "Paul Atreides, *Dune*",
+    "category": "mindset"
+  },
+  {
+    "id": "4d5e6f7a-8b90-1c23-e345-678f90123456",
+    "text": "You never really understand a person until you consider things from his point of view… Until you climb inside his skin and walk around in it.",
+    "author": "Atticus Finch, *To Kill a Mockingbird*",
+    "category": "empathy"
+  },
+  {
+    "id": "5e6f7a8b-901c-2d34-f456-789012345678",
+    "text": "The world ain't all sunshine and rainbows. It is a very mean and nasty place—and it will beat you to your knees and keep you there permanently if you let it.",
+    "author": "Rocky Balboa, *Rocky Balboa*",
+    "category": "reality"
+  },
+  {
+    "id": "6f7a8b90-1c23-3e45-0456-890123456789",
+    "text": "The very things that hold you down are going to lift you up.",
+    "author": "Dumbo, *Dumbo*",
+    "category": "hope"
+  },
+  {
+    "id": "7a8b901c-2345-4f56-1567-901234567890",
+    "text": "To see the world… to see behind walls, to draw closer, to find each other and to feel. That is the purpose of life.",
+    "author": "Narrator, *The Secret Life of Walter Mitty*",
+    "category": "purpose"
+  },
+  {
+    "id": "8b901c23-3456-5a67-2678-012345678901",
+    "text": "You got a dream. You gotta protect it. People can't do something themselves, they wanna tell you you can’t do it.",
+    "author": "Christopher Gardner, *The Pursuit of Happyness*",
+    "category": "motivation"
+  },
+  {
+    "id": "9c012345-4567-6b78-3789-123456789012",
+    "text": "Elementary, my dear Watson.",
+    "author": "Sherlock Holmes, *The Adventures of Sherlock Holmes*",
+    "category": "confidence"
+  },
+  {
+    "id": "0d123456-5678-7c89-4890-234567890123",
+    "text": "May the odds be ever in your favor.",
+    "author": "Effie Trinket, *The Hunger Games*",
+    "category": "irony"
+  }
+]

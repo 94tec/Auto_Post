@@ -1,0 +1,362 @@
+[
+  {
+    "id": "UUID",
+    "text": "Hard work beats talent when talent doesn’t work hard.",
+    "author": "Joe Cole",
+    "category": "resilience"
+  },
+  {
+    "id": "UUID",
+    "text": "Believe in your grind even when no one else does.",
+    "author": "Joe Cole",
+    "category": "resilience"
+  },
+  {
+    "id": "UUID",
+    "text": "Keep your focus and the world will follow.",
+    "author": "Joe Cole",
+    "category": "resilience"
+  },
+  {
+    "id": "UUID",
+    "text": "Every setback is a setup for a comeback.",
+    "author": "Joe Cole",
+    "category": "resilience"
+  },
+  {
+    "id": "UUID",
+    "text": "You can't fake heart. You either have it or you don't.",
+    "author": "Joe Cole",
+    "category": "resilience"
+  },
+  {
+    "id": "UUID",
+    "text": "Your hustle speaks louder than your words.",
+    "author": "Joe Cole",
+    "category": "resilience"
+  },
+  {
+    "id": "UUID",
+    "text": "Play every day like it's your last.",
+    "author": "Joe Cole",
+    "category": "resilience"
+  },
+  {
+    "id": "UUID",
+    "text": "Lead with your effort, not your ego.",
+    "author": "Joe Cole",
+    "category": "resilience"
+  },
+  {
+    "id": "UUID",
+    "text": "When you love the game, it loves you back.",
+    "author": "Joe Cole",
+    "category": "resilience"
+  },
+  {
+    "id": "UUID",
+    "text": "Consistency is the true mark of greatness.",
+    "author": "Joe Cole",
+    "category": "resilience"
+  },
+  {
+    "id": "UUID",
+    "text": "One more try is always worth it.",
+    "author": "Ed Mylett",
+    "category": "mindset"
+  },
+  {
+    "id": "UUID",
+    "text": "You were born to do something great.",
+    "author": "Ed Mylett",
+    "category": "mindset"
+  },
+  {
+    "id": "UUID",
+    "text": "Confidence is the memory of winning.",
+    "author": "Ed Mylett",
+    "category": "mindset"
+  },
+  {
+    "id": "UUID",
+    "text": "Your identity is the thermostat of your life.",
+    "author": "Ed Mylett",
+    "category": "mindset"
+  },
+  {
+    "id": "UUID",
+    "text": "The biggest shift is shifting your identity.",
+    "author": "Ed Mylett",
+    "category": "mindset"
+  },
+  {
+    "id": "UUID",
+    "text": "Max out your life.",
+    "author": "Ed Mylett",
+    "category": "mindset"
+  },
+  {
+    "id": "UUID",
+    "text": "Live with intention, not impulse.",
+    "author": "Ed Mylett",
+    "category": "mindset"
+  },
+  {
+    "id": "UUID",
+    "text": "Your mind is your most powerful muscle. Train it well.",
+    "author": "Ed Mylett",
+    "category": "mindset"
+  },
+  {
+    "id": "UUID",
+    "text": "Don’t negotiate with your potential.",
+    "author": "Ed Mylett",
+    "category": "mindset"
+  },
+  {
+    "id": "UUID",
+    "text": "Power is taken by the bold, not given to the timid.",
+    "author": "Ed Mylett",
+    "category": "mindset"
+  },
+  {
+    "id": "UUID",
+    "text": "Don't let your dreams be dreams.",
+    "author": "Ben Nemtin",
+    "category": "motivation"
+  },
+  {
+    "id": "UUID",
+    "text": "The only way to achieve the impossible is to believe it is possible.",
+    "author": "Ben Nemtin",
+    "category": "motivation"
+  },
+  {
+    "id": "UUID",
+    "text": "Your bucket list is your resume for life.",
+    "author": "Ben Nemtin",
+    "category": "motivation"
+  },
+  {
+    "id": "UUID",
+    "text": "You miss 100% of the shots you don't take.",
+    "author": "Ben Nemtin",
+    "category": "motivation"
+  },
+  {
+    "id": "UUID",
+    "text": "When you give back, you get back.",
+    "author": "Ben Nemtin",
+    "category": "motivation"
+  },
+  {
+    "id": "UUID",
+    "text": "Dream big, act bigger.",
+    "author": "Ben Nemtin",
+    "category": "motivation"
+  },
+  {
+    "id": "UUID",
+    "text": "Start small, think big.",
+    "author": "Ben Nemtin",
+    "category": "motivation"
+  },
+  {
+    "id": "UUID",
+    "text": "Make the impossible possible.",
+    "author": "Ben Nemtin",
+    "category": "motivation"
+  },
+  {
+    "id": "UUID",
+    "text": "Live a story worth telling.",
+    "author": "Ben Nemtin",
+    "category": "motivation"
+  },
+  {
+    "id": "UUID",
+    "text": "You were born to make an impact.",
+    "author": "Ben Nemtin",
+    "category": "motivation"
+  },
+  {
+    "id": "UUID",
+    "text": "Every day is a chance to get better.",
+    "author": "Michael Oher",
+    "category": "resilience"
+  },
+  {
+    "id": "UUID",
+    "text": "Don't ever let someone tell you that you can't do something.",
+    "author": "Michael Oher",
+    "category": "resilience"
+  },
+  {
+    "id": "UUID",
+    "text": "Greatness lives in the little things.",
+    "author": "Michael Oher",
+    "category": "resilience"
+  },
+  {
+    "id": "UUID",
+    "text": "Fight for your dream like your life depends on it.",
+    "author": "Michael Oher",
+    "category": "resilience"
+  },
+  {
+    "id": "UUID",
+    "text": "You define your future, not your past.",
+    "author": "Michael Oher",
+    "category": "resilience"
+  },
+  {
+    "id": "UUID",
+    "text": "Be stronger than your excuse.",
+    "author": "Michael Oher",
+    "category": "resilience"
+  },
+  {
+    "id": "UUID",
+    "text": "The hard road builds the strongest people.",
+    "author": "Michael Oher",
+    "category": "resilience"
+  },
+  {
+    "id": "UUID",
+    "text": "No one can write your story but you.",
+    "author": "Michael Oher",
+    "category": "resilience"
+  },
+  {
+    "id": "UUID",
+    "text": "Believe beyond what you see.",
+    "author": "Michael Oher",
+    "category": "resilience"
+  },
+  {
+    "id": "UUID",
+    "text": "Discipline creates opportunity.",
+    "author": "Michael Oher",
+    "category": "resilience"
+  },
+  {
+    "id": "UUID",
+    "text": "I made my pain poetic.",
+    "author": "French The Kid",
+    "category": "resilience"
+  },
+  {
+    "id": "UUID",
+    "text": "From grey skies to greatness.",
+    "author": "French The Kid",
+    "category": "resilience"
+  },
+  {
+    "id": "UUID",
+    "text": "The street taught me what school never could.",
+    "author": "French The Kid",
+    "category": "resilience"
+  },
+  {
+    "id": "UUID",
+    "text": "Every verse is a piece of my past.",
+    "author": "French The Kid",
+    "category": "resilience"
+  },
+  {
+    "id": "UUID",
+    "text": "You don’t need approval to chase your dream.",
+    "author": "French The Kid",
+    "category": "resilience"
+  },
+  {
+    "id": "UUID",
+    "text": "Keep pushing, even when the world says stop.",
+    "author": "French The Kid",
+    "category": "resilience"
+  },
+  {
+    "id": "UUID",
+    "text": "I turned trauma into tracks.",
+    "author": "French The Kid",
+    "category": "resilience"
+  },
+  {
+    "id": "UUID",
+    "text": "The grind don’t pause for pain.",
+    "author": "French The Kid",
+    "category": "resilience"
+  },
+  {
+    "id": "UUID",
+    "text": "Stay real, even when fake wins.",
+    "author": "French The Kid",
+    "category": "resilience"
+  },
+  {
+    "id": "UUID",
+    "text": "Music saved me when nothing else could.",
+    "author": "French The Kid",
+    "category": "resilience"
+  },
+  {
+    "id": "UUID",
+    "text": "I’m not cocky, I’m confident. So when you tell me I can’t, I believe it’s you can’t.",
+    "author": "Jadakiss",
+    "category": "mindset"
+  },
+  {
+    "id": "UUID",
+    "text": "You can’t learn hustle, it's in your blood.",
+    "author": "Jadakiss",
+    "category": "mindset"
+  },
+  {
+    "id": "UUID",
+    "text": "A setback is a setup for a comeback.",
+    "author": "Jadakiss",
+    "category": "mindset"
+  },
+  {
+    "id": "UUID",
+    "text": "Pain is temporary. Pride is forever.",
+    "author": "Jadakiss",
+    "category": "mindset"
+  },
+  {
+    "id": "UUID",
+    "text": "Talk less, grind more.",
+    "author": "Jadakiss",
+    "category": "mindset"
+  },
+  {
+    "id": "UUID",
+    "text": "The real always survive the fake.",
+    "author": "Jadakiss",
+    "category": "mindset"
+  },
+  {
+    "id": "UUID",
+    "text": "Keep your grass cut low. Snakes show up quick.",
+    "author": "Jadakiss",
+    "category": "mindset"
+  },
+  {
+    "id": "UUID",
+    "text": "Respect the struggle. It built the grind.",
+    "author": "Jadakiss",
+    "category": "mindset"
+  },
+  {
+    "id": "UUID",
+    "text": "I came from nothing, that’s why I appreciate everything.",
+    "author": "Jadakiss",
+    "category": "mindset"
+  },
+  {
+    "id": "UUID",
+    "text": "You only lose if you quit. Everything else is a lesson.",
+    "author": "Jadakiss",
+    "category": "mindset"
+  }
+]
