@@ -36,11 +36,23 @@ app.use(cookieParser(process.env.COOKIE_SECRET));
 app.use(helmet());
 
 /* ── CORS ───────────────────────────────────────────────────── */
+const allowedOrigins = [
+  'http://localhost:5173',
+  'https://your-app.vercel.app',
+];
+
 app.use(cors({
-  origin:      process.env.CORS_ORIGIN || 'http://localhost:5173',
+  origin: allowedOrigins,
   credentials: true,
-  methods:     ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
 }));
+
+const io = new Server(server, {
+  cors: {
+    origin: allowedOrigins,
+    methods: ['GET', 'POST'],
+    credentials: true,
+  }
+});
 
 /* ── HTTP logger ────────────────────────────────────────────── */
 app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
@@ -58,14 +70,6 @@ app.use('/api', router);
 /* ── Error handlers (must be last) ─────────────────────────── */
 app.use(notFound);
 app.use(errorHandler);
-
-/* ── Socket.io (after server is created) ───────────────────── */
-const io = new Server(server, {
-  cors: {
-    origin:      process.env.CORS_ORIGIN || 'http://localhost:5173',
-    credentials: true,
-  },
-});
 
 io.on('connection', (socket) => {
   console.log('[Socket.io] User connected:', socket.id);
