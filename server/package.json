@@ -29,7 +29,10 @@
     "nodemailer": "^7.0.5",
     "resend": "^6.9.4",
     "ua-parser-js": "^2.0.4",
-    "useragent": "^2.3.0"
+    "useragent": "^2.3.0",
+    "redis": "^5.11.0",
+    "socket.io": "^4.8.3",
+    "@socket.io/redis-adapter": "^1.0.0"
   },
   "devDependencies": {
     "nodemon": "^3.1.10"
