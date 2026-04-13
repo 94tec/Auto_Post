@@ -38,7 +38,7 @@ app.use(helmet());
 /* ── CORS ───────────────────────────────────────────────────── */
 const allowedOrigins = [
   'http://localhost:5173',
-  'https://your-app.vercel.app',
+  'https://auto-post-aqghnpyu0-94tecs-projects.vercel.app',
 ];
 
 app.use(cors({

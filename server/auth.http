@@ -16,10 +16,11 @@
 ###   ✗ /api/resend-verification-email  →  ✅ /api/auth/resend-verification
 ###   ✗ /api/user/forgot-password  →  ✅ not in refactored server (handle client-side)
 ###   ✗ POST /logout  →  ✅ not needed (Firebase tokens are stateless; expire server-side)
+###   ✗ http://localhost:3000
 ### ═══════════════════════════════════════════════════════════════════
 
 # ── Base URLs ─────────────────────────────────────────────────────────
-@host      = http://localhost:3000
+@host      = https://auto-post-u9si.onrender.com
 @authBase  = {{host}}/api/auth
 @adminBase = {{host}}/api/admin
 @userBase  = {{host}}/api/users
@@ -27,7 +28,7 @@
 # ── Tokens ────────────────────────────────────────────────────────────
 # Firebase ID tokens expire after 1 hour.
 # Re-run POST /api/auth/login to get a fresh one.
-@adminToken = eyJhbGciOiJSUzI1NiIsImtpZCI6IjVlODJhZmI0ZWY2OWI3NjM4MzA2OWFjNmI1N2U3ZTY1MjAzYmZlOTYiLCJ0eXAiOiJKV1QifQ.eyJuYW1lIjoiRml4dG9uZSBEYW11Y2hpIiwiaXNzIjoiaHR0cHM6Ly9zZWN1cmV0b2tlbi5nb29nbGUuY29tL3F1b3Rlc2FwcC0yNmY4NCIsImF1ZCI6InF1b3Rlc2FwcC0yNmY4NCIsImF1dGhfdGltZSI6MTc3NTE4MTA0MSwidXNlcl9pZCI6IjNrb0xLcDNmdWJicWlHaHR5MWF4NlZwNGVCVTIiLCJzdWIiOiIza29MS3AzZnViYnFpR2h0eTFheDZWcDRlQlUyIiwiaWF0IjoxNzc1MTgxMDQxLCJleHAiOjE3NzUxODQ2NDEsImVtYWlsIjoiZml4dG9uZTk0dGVjQGdtYWlsLmNvbSIsImVtYWlsX3ZlcmlmaWVkIjp0cnVlLCJmaXJlYmFzZSI6eyJpZGVudGl0aWVzIjp7ImVtYWlsIjpbImZpeHRvbmU5NHRlY0BnbWFpbC5jb20iXX0sInNpZ25faW5fcHJvdmlkZXIiOiJwYXNzd29yZCJ9fQ.g0G_6-gRr71qz7GDHmnIp9Qoi7WmY47nrIl8_f3UgFTeX-utt0bTrHpr9LchbDy-dQJWLeh8oVBQrEB_ixyYB12ac9VesOxQWDEpcY1__5aLFPI8x-uf6P_P3ZHSHPXfbyJmZtJALnKfbh_QSpWrS1DUI49pmNl60tA3_6d9je2r6m-nERaYlwgstF01gOF5yLF770I3GZWFascQcq3B9E_qmdK3H2kga1MoGtHXiJB3qdmxU-uefduNHV-FzldVObCGu8cEfLcL11odBQWhsLFkKmiJ9VXy1RtxTuaiPaQSSPJJAiurWOKYA7mX7XHtXbT1vwHK5KkCEvY8hceH3g
+@adminToken = eyJhbGciOiJSUzI1NiIsImtpZCI6IjVlODJhZmI0ZWY2OWI3NjM4MzA2OWFjNmI1N2U3ZTY1MjAzYmZlOTYiLCJ0eXAiOiJKV1QifQ.eyJuYW1lIjoiRml4dG9uZSBEYW11Y2hpIiwiaXNzIjoiaHR0cHM6Ly9zZWN1cmV0b2tlbi5nb29nbGUuY29tL3F1b3Rlc2FwcC0yNmY4NCIsImF1ZCI6InF1b3Rlc2FwcC0yNmY4NCIsImF1dGhfdGltZSI6MTc3NjA0MzU0MCwidXNlcl9pZCI6IjNrb0xLcDNmdWJicWlHaHR5MWF4NlZwNGVCVTIiLCJzdWIiOiIza29MS3AzZnViYnFpR2h0eTFheDZWcDRlQlUyIiwiaWF0IjoxNzc2MDQzNTQwLCJleHAiOjE3NzYwNDcxNDAsImVtYWlsIjoiZml4dG9uZTk0dGVjQGdtYWlsLmNvbSIsImVtYWlsX3ZlcmlmaWVkIjp0cnVlLCJmaXJlYmFzZSI6eyJpZGVudGl0aWVzIjp7ImVtYWlsIjpbImZpeHRvbmU5NHRlY0BnbWFpbC5jb20iXX0sInNpZ25faW5fcHJvdmlkZXIiOiJwYXNzd29yZCJ9fQ.UU5gYns-zh5yNSua-ShgKvG0LrhYbCXzl2P3Sj6a4ZCKu_1u6VDRRhprN2xRsgoI8IX-Y2upAbaB0nlqOAbojEoJbgGFaoFr_qTuM11wW-ShHFwDWatK2-myPjINyeif4LheXlg2cSdN1JykZp4m67WWfXnqbERtfVoJTNQ2IuV34m4jmagzquJM1nth77nhDFSDde7VEq596fmQMfk4bYZWd_Vl1c6i7YgEASwa1O_pu9bnP2Oz6QybE3B01l42DbzEzDBvLBPu8DRePG_xvlbVDHTacn2FFrA2PBi2sTNto-NDbHH1k9x8-eqa-xjmqZKPnZ0sdAyx1T4vwzJXNg
 @userToken  = eyJhbGciOiJSUzI1NiIsImtpZCI6IjM3MzAwNzY5YTA3ZTA1MTE2ZjdlNTEzOGZhOTA5MzY4NWVlYmMyNDAiLCJ0eXAiOiJKV1QifQ.eyJuYW1lIjoiRml4dG9uZSBNdGVuZ28iLCJpc3MiOiJodHRwczovL3NlY3VyZXRva2VuLmdvb2dsZS5jb20vcXVvdGVzYXBwLTI2Zjg0IiwiYXVkIjoicXVvdGVzYXBwLTI2Zjg0IiwiYXV0aF90aW1lIjoxNzc1MTg2MTM1LCJ1c2VyX2lkIjoiWlY1OFJSS1JIdlVKdlU5VjF3dG5KdlkxWGVvMiIsInN1YiI6IlpWNThSUktSSHZVSnZVOVYxd3RuSnZZMVhlbzIiLCJpYXQiOjE3NzUxODYxMzUsImV4cCI6MTc3NTE4OTczNSwiZW1haWwiOiJtdGVuZ28wMTA5QHlhaG9vLmNvbSIsImVtYWlsX3ZlcmlmaWVkIjp0cnVlLCJmaXJlYmFzZSI6eyJpZGVudGl0aWVzIjp7ImVtYWlsIjpbIm10ZW5nbzAxMDlAeWFob28uY29tIl19LCJzaWduX2luX3Byb3ZpZGVyIjoicGFzc3dvcmQifX0.X2l3AMO-6ehZd2NJMoaQUp-yiGIAAJZL3wgbfA_nggF2VipHTXYrUgz-zOKlfk2f2VKKIQYHhDlJtEM5pcxesVdKgFCGVT8tKo7wdO0UPRUjMX6Q9WGWdL40n9zI_YQYrBcWl4jCESrcvdC20HZ88BsdR10WCmE6lvpj45sCrH6VfEoprTXjd7jbiqZipiMUS9Yrvuuno7DXkDZq-23EBELp318Ek_yiDZL0PGvJ82CjMsnxlJn6tYA5XgV6DAIHIDnfea7fkdd_dDbnkb4JsBYjr6kfLVT6IhJU6tgoxVumJUkmak9qmLfAxgp4tpebYv0P_5xOYH_K0UAzXuLDQA
 
 # ── UIDs ──────────────────────────────────────────────────────────────
@@ -159,7 +160,8 @@ Content-Type: application/json
 
 ### 2a. ✅ Login with Firebase idToken from client SDK
 # → 200  { uid, role, status, emailVerified, adminApproved, permissions }
-POST {{authBase}}/login
+###POST {{authBase}}/login
+POST  https://auto-post-u9si.onrender.com/api/auth/login
 Content-Type: application/json
 
 {
