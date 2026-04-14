@@ -33,7 +33,8 @@
 import { auth }                  from '../config/firebase';
 import { signInWithCustomToken } from 'firebase/auth';
 
-const API_BASE = '/api';
+// const API_BASE = '/api';
+const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
 /* ── Error class ─────────────────────────────────────────────── */
 export class ApiError extends Error {
@@ -63,6 +64,7 @@ const getCsrf = () => {
 /* ── Core request ────────────────────────────────────────────── */
 let _retrying = false; // prevent infinite retry loop
 
+/*
 async function request(endpoint, options = {}, retried = false) {
   const token = await getToken(retried); // force refresh on retry
 
@@ -80,6 +82,31 @@ async function request(endpoint, options = {}, retried = false) {
 
   if (!res.ok) {
     // Auto-retry once on token expiry
+    if (data.code === 'TOKEN_EXPIRED' && !retried) {
+      return request(endpoint, options, true);
+    }
+    throw new ApiError({ ...data, status: res.status });
+  }
+
+  return data;
+}
+*/
+async function request(endpoint, options = {}, retried = false) {
+  const token = await getToken(retried);
+
+  const headers = {
+    'Content-Type': 'application/json',
+    ...(token && { Authorization: `Bearer ${token}` }),
+    ...(options.method && options.method !== 'GET'
+        ? { 'X-CSRF-Token': getCsrf() ?? '' }
+        : {}),
+    ...options.headers,
+  };
+
+  const res = await fetch(`${API_BASE}${endpoint}`, { ...options, headers });
+  const data = await res.json().catch(() => ({}));
+
+  if (!res.ok) {
     if (data.code === 'TOKEN_EXPIRED' && !retried) {
       return request(endpoint, options, true);
     }
