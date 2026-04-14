@@ -34,7 +34,7 @@ import { auth }                  from '../config/firebase';
 import { signInWithCustomToken } from 'firebase/auth';
 
 // const API_BASE = '/api';
-const API_BASE = import.meta.env.VITE_API_URL || '/api';
+const API_BASE = import.meta.env.VITE_SERVER_URL || '/api';
 
 /* ── Error class ─────────────────────────────────────────────── */
 export class ApiError extends Error {
