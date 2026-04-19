@@ -60,7 +60,7 @@ const QuoteModal = ({ isOpen, onClose, onSubmit }) => {
           exit="exit"
           onClick={onClose}
           className="fixed inset-0 z-50 flex items-center justify-center p-4"
-          style={{ background: 'rgba(5, 8, 18, 0.82)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)' }}
+          style={{ background: 'rgba(5, 8, 18, 0.82)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', zIndex: 1000 }}
         >
           {/* ── panel ── */}
           <motion.div
@@ -70,6 +70,7 @@ const QuoteModal = ({ isOpen, onClose, onSubmit }) => {
             exit="exit"
             onClick={e => e.stopPropagation()}
             className="w-full max-w-[520px] relative"
+            zIndex={1001}
           >
             {/* close button — floats above the card */}
             <motion.button

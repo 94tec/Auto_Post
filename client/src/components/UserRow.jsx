@@ -62,8 +62,8 @@ const UserRow = ({ user, currentUid, onAction, onOpenDetail }) => {
           <FiX size={14} className="text-gray-500" />
         )}
       </td>
-      <td className="py-3 px-4 text-right">
-        <div className="relative flex justify-end">
+      <td className="py-3 px-4">
+        <div className="relative">
           <button
             ref={buttonRef}
             onClick={() => setDropdownOpen(!dropdownOpen)}

@@ -76,7 +76,7 @@ const AddLyricModal = ({ isOpen, onClose, onSuccess }) => {
       {isOpen && (
         <>
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm" onClick={onClose} />
+            className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm" style={{ zIndex: 1000 }} onClick={onClose} />
 
           <motion.div
             initial={{ opacity: 0, y: 32, scale: 0.96 }}
@@ -84,6 +84,7 @@ const AddLyricModal = ({ isOpen, onClose, onSuccess }) => {
             exit={{    opacity: 0, y: 32, scale: 0.96  }}
             transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
             className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 pointer-events-none"
+            style={{ zIndex: 1001 }}
           >
             <div className="pointer-events-auto w-full sm:max-w-md rounded-t-[28px] sm:rounded-[28px]
                             border border-white/10 overflow-hidden"

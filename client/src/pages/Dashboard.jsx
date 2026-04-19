@@ -16,7 +16,6 @@ import {
 } from 'react-icons/fi';
 
 import QuoteCard  from '../components/QuoteCard';
-import QuoteForm  from '../components/QuoteForm';
 import RoleGuard  from '../components/RoleGuard';
 import useRole    from '../hooks/useRole';
 import { ROLES }  from '../store/authSlice';
@@ -148,15 +147,25 @@ const TopAuthors = ({ quotes }) => {
     </div>
   );
 };
+const toMs = (ts) => {
+  if (!ts) return 0;
+  if (ts?.toDate) return ts.toDate().getTime();
+  if (ts?._seconds) return ts._seconds * 1000;
+  if (ts?.seconds) return ts.seconds * 1000;
+  const d = new Date(ts);
+  return isNaN(d) ? 0 : d.getTime();
+};
 
 const RecentActivity = ({ quotes }) => {
   const recent = useMemo(() =>
-    [...quotes].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, 5),
-    [quotes],
+          [...quotes].sort((a, b) => toMs(b.createdAt) - toMs(a.createdAt)).slice(0, 5),
+      [quotes],
   );
+
   const timeAgo = (ts) => {
-    if (!ts) return '—';
-    const m = Math.floor((Date.now() - new Date(ts)) / 60000);
+    const ms = toMs(ts);
+    if (!ms) return '?';
+    const m = Math.floor((Date.now() - ms) / 60000);
     if (m < 1) return 'just now';
     if (m < 60) return `${m}m ago`;
     const h = Math.floor(m / 60);
@@ -432,7 +441,6 @@ const Dashboard = () => {
       navigate('/');
     } catch { toast.error('Logout failed'); }
   };
-
   /* ── derived ── */
   const favCount  = quotes.filter(q => q.isFavorite).length;
   const catCount  = new Set(quotes.map(q => q.category).filter(Boolean)).size;
@@ -442,9 +450,11 @@ const Dashboard = () => {
   }).length;
 
   const latestDate = useMemo(() => {
-    if (!quotes.length) return '—';
-    const sorted = [...quotes].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-    return new Date(sorted[0].createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    if (!quotes.length) return '?';
+    const sorted = [...quotes].sort((a, b) => toMs(b.createdAt) - toMs(a.createdAt));
+    const ms = toMs(sorted[0].createdAt);
+    if (!ms) return '?';
+    return new Date(ms).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   }, [quotes]);
 
   const categories = useMemo(() => {
@@ -563,16 +573,12 @@ const Dashboard = () => {
         {/* quote form */}
         <div ref={formRef}>
           <AnimatePresence>
-            {showForm && isAllowed([ROLES.ADMIN, ROLES.USER]) && (
-              <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }}
-                exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.22 }} className="overflow-hidden">
-                <QuoteForm
-                  editingQuote={editing}
-                  onSubmit={handleAddOrUpdate}
-                  onCancel={() => { setEditing(null); setShowForm(false); }}
-                  isSubmitting={isSaving}
-                />
-              </motion.div>
+            {showForm && (
+              <QuoteModal
+                isOpen={showForm}
+                onClose={() => setShowForm(false)}
+                onSubmit={handleAddOrUpdate}
+              />
             )}
           </AnimatePresence>
         </div>

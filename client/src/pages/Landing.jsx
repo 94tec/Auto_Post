@@ -318,7 +318,7 @@ const Landing = () => {
             </motion.p>
 
             <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.45, duration: 0.45 }} className="mb-5">
+              transition={{ delay: 0.45, duration: 0.45 }} className="mb-5 -ml-12">
               <QuoteFeature quotes={allQuotes} autoPlay={isAutoPlay} onAutoPlay={setIsAutoPlay} />
             </motion.div>
 

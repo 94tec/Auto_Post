@@ -318,12 +318,12 @@ Admin approves → user (active)   ← welcome email sent` },
                     whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}
                     transition={{ duration: 0.4 }}
                     className="p-6 rounded-2xl border border-white/8" style={{ background: SLATE }}>
-                    <div className="flex items-start gap-4">
+                    <div className="flex flex-col sm:flex-row items-start gap-3">
                       <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
                            style={{ background: `${color}18` }}>
                         <Icon size={16} style={{ color }} />
                       </div>
-                      <div className="flex-1">
+                      <div className="w-full min-w-0">
                         <h3 className="text-[15px] font-bold text-white mb-2">{title}</h3>
                         <p className="text-[13px] text-white/50 leading-relaxed">{desc}</p>
                         {code && <CodeBlock code={code} lang="text" />}

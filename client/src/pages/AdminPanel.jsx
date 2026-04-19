@@ -31,12 +31,17 @@ import { auth }                                from '../config/firebase';
 import { adminApi }                            from '../utils/api';
 import { useAuth }                             from '../context/AuthContext';
 import useRole                                 from '../hooks/useRole';
+import { usePagination }                       from '../hooks/usePagination';
+import { Pagination }                          from '../components/Pagination';
 import toast                                   from 'react-hot-toast';
 
 /* ── external modals ─────────────────────────────────────────── */
 import CreateAdminModal from '../components/CreateAdminModal';
 import CreateUserModal  from '../components/CreateUserModal';
 import UserDetailPanel  from '../components/UserDetailPanel';
+import AnalyticsPanel from '../components/AnalyticsPanel';
+import AlertsPanel from '../components/AlertsPanel';
+import QuotesManagerPanel from '../components/QuotesManagerPanel';
 import UserRow from '../components/UserRow';
 
 import {
@@ -44,7 +49,8 @@ import {
   FiFilter, FiMoreVertical, FiX, FiHome, FiBookOpen,
   FiClock, FiAlertTriangle, FiLock, FiUnlock, FiRefreshCw,
   FiZap, FiChevronDown, FiLogOut, FiUserPlus, FiCheck,
-  FiAlertCircle, FiArrowRight, FiSlash, FiGrid,
+  FiAlertCircle, FiArrowRight, FiSlash, FiGrid,FiFileText,
+  FiSettings,
 } from 'react-icons/fi';
 
 /* ── design tokens ───────────────────────────────────────────── */
@@ -72,6 +78,27 @@ const STATUS_CFG = {
   pending:   { color: C.amber,  bg: `${C.amber}18`           },
   suspended: { color: C.red,    bg: 'rgba(248,113,113,0.10)' },
 };
+const myAlerts = [
+  {
+    id: 'alert_001',
+    type: 'critical',
+    title: 'Database connection pool exhausted',
+    desc: 'Connections exceeded limit of 100',
+    time: '2m ago',
+    read: false,
+    actions: [{ label: 'Scale up', variant: 'primary' }],
+    meta: { poolSize: 100, active: 98 }
+  },
+  {
+    id: 'alert_002',
+    type: 'warning',
+    title: 'High memory usage',
+    desc: 'Node process using 85% of available RAM',
+    time: '15m ago',
+    read: false,
+    actions: [{ label: 'Restart worker', variant: 'danger' }]
+  }
+];
 
 /* ════════════════════════════════════════════════════════════════
    ATOMS
@@ -328,13 +355,30 @@ const AdminPanel = () => {
     { id: 'queue',    label: 'Queue',     icon: FiClock,    badge: queue.length || null },
     { id: 'users',    label: 'Users',     icon: FiUsers,    badge: null },
     { id: 'logs',     label: 'Audit',     icon: FiActivity, badge: null },
+    {id: 'analytics', label: 'Analytics', icon: FiSettings, badge: null },
+    {id: 'alerts',    label: 'Alerts',    icon: FiAlertTriangle, badge: null },
+    {id: 'quotes',    label: 'Quotes Manager',    icon: FiFileText,      badge: null }
   ];
+  const usersPg = usePagination(filtered, 6);
+  const queuePg = usePagination(queue, 6);
+  const logsPg  = usePagination(logs, 6);
+
+  useEffect(() => { usersPg.reset(); }, [search, roleFilter]);
 
   const logDot = ev =>
     ev?.includes('DELETE') || ev?.includes('SUSPEND') ? C.red    :
     ev?.includes('CREATE') || ev?.includes('APPROVE') ? C.green  :
     ev?.includes('LOGIN')                              ? C.cyan   : C.amber;
 
+  const parseLogDate = (log) => {
+    const raw = log.timestamp || log.createdAt;
+    if (!raw) return 'No date';
+    if (raw?.toDate) return raw.toDate().toLocaleString('en-KE', { timeZone: 'Africa/Nairobi' });
+    if (raw?._seconds) return new Date(raw._seconds * 1000).toLocaleString('en-KE', { timeZone: 'Africa/Nairobi' });
+    if (raw?.seconds) return new Date(raw.seconds * 1000).toLocaleString('en-KE', { timeZone: 'Africa/Nairobi' });
+    const d = new Date(raw);
+    return isNaN(d) ? 'No date' : d.toLocaleString('en-KE', { timeZone: 'Africa/Nairobi' });
+  };
   /* ─────────────────────────────────────────────────────────────── */
   return (
     <div className="min-h-screen text-white" style={{ background: C.navy }}>
@@ -604,12 +648,15 @@ const AdminPanel = () => {
                   <p className="text-[13px] text-white/30">Queue is empty — all caught up!</p>
                 </div>
               ) : (
-                <TableShell>
-                  {queue.map((u, i) => (
-                    <UserRow key={u.uid} u={u} idx={i} currentUid={me?.uid}
-                      onAction={handleAction} openMenu={openMenu} setOpenMenu={setOpenMenu} />
-                  ))}
-                </TableShell>
+                  <>
+                    <TableShell>
+                      {queuePg.items.map((u, i) => (
+                        <UserRow key={u.uid} u={u} idx={i} currentUid={me?.uid}
+                          onAction={handleAction} openMenu={openMenu} setOpenMenu={setOpenMenu} />
+                      ))}
+                    </TableShell>
+                    <Pagination {...queuePg} onPage={queuePg.setPage} />
+                </>
               )}
             </motion.div>
           )}
@@ -630,7 +677,7 @@ const AdminPanel = () => {
               </div>
 
               <p className="text-[11px] text-white/22">
-                Showing {filtered.length} of {users.length} accounts
+                Showing {usersPg.from}–{usersPg.to} of {filtered.length} accounts
               </p>
 
               {usersLoading ? (
@@ -653,31 +700,34 @@ const AdminPanel = () => {
                   )}
                 </div>
               ) : (
-                <div className="rounded-2xl border border-white/8 overflow-x-auto" style={{ background: C.slate }}>
-                  <table className="w-full text-sm min-w-[800px]">
-                    <thead>
-                      <tr className="border-b border-white/10">
-                        <th className="text-left py-3 px-4 text-[10px] font-medium uppercase tracking-wider text-white/40">User</th>
-                        <th className="text-left py-3 px-4 text-[10px] font-medium uppercase tracking-wider text-white/40">Role</th>
-                        <th className="text-left py-3 px-4 text-[10px] font-medium uppercase tracking-wider text-white/40">Status</th>
-                        <th className="text-left py-3 px-4 text-[10px] font-medium uppercase tracking-wider text-white/40">Verified</th>
-                        <th className="text-left py-3 px-4 text-[10px] font-medium uppercase tracking-wider text-white/40">Write</th>
-                        <th className="text-left py-3 px-4 text-[10px] font-medium uppercase tracking-wider text-white/40">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filtered.map((user) => (
-                        <UserRow
-                          key={user.uid}
-                          user={user}
-                          currentUid={me?.uid}
-                          onAction={handleAction}
-                          onOpenDetail={(user) => setSelectedUser(user)}
-                        />
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                  <>
+                    <div className="rounded-2xl border border-white/8 overflow-x-auto" style={{ background: C.slate }}>
+                      <table className="w-full text-sm min-w-[800px]">
+                        <thead>
+                          <tr className="border-b border-white/10">
+                            <th className="text-left py-3 px-4 text-[10px] font-medium uppercase tracking-wider text-white/40">User</th>
+                            <th className="text-left py-3 px-4 text-[10px] font-medium uppercase tracking-wider text-white/40">Role</th>
+                            <th className="text-left py-3 px-4 text-[10px] font-medium uppercase tracking-wider text-white/40">Status</th>
+                            <th className="text-left py-3 px-4 text-[10px] font-medium uppercase tracking-wider text-white/40">Verified</th>
+                            <th className="text-left py-3 px-4 text-[10px] font-medium uppercase tracking-wider text-white/40">Write</th>
+                            <th className="text-left py-3 px-4 text-[10px] font-medium uppercase tracking-wider text-white/40">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                        {usersPg.items.map((user) => (
+                            <UserRow
+                                key={user.uid}
+                                user={user}
+                                currentUid={me?.uid}
+                                onAction={handleAction}
+                                onOpenDetail={(user) => setSelectedUser(user)}
+                            />
+                        ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    <Pagination {...usersPg} onPage={usersPg.setPage} />
+                  </>
               )}
               <UserDetailPanel
                 user={selectedUser}
@@ -696,7 +746,9 @@ const AdminPanel = () => {
               className="space-y-4">
 
               <div className="flex items-center justify-between">
-                <p className="text-[12px] text-white/30">{logs.length} entries</p>
+                <p className="text-[12px] text-white/30">
+                  {logsPg.from}–{logsPg.to} of {logs.length} entries  {/* ← updated */}
+                </p>
                 <select value={logLimit} onChange={e => setLogLimit(Number(e.target.value))}
                   className="appearance-none px-3 py-1.5 rounded-xl bg-[#141924]
                              border border-white/8 text-[12px] text-white/50
@@ -714,33 +766,60 @@ const AdminPanel = () => {
                   <p className="text-[13px] text-white/28">No audit logs yet.</p>
                 </div>
               ) : (
-                <div className="rounded-2xl border border-white/8 overflow-hidden"
-                     style={{ background: C.slate }}>
-                  <div className="divide-y divide-white/5">
-                    {logs.map((log, i) => (
-                      <motion.div key={i}
-                        initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-                        transition={{ delay: i * 0.012 }}
-                        className="flex items-start gap-3 px-4 py-3
-                                   hover:bg-white/[0.02] transition-colors">
-                        <div className="w-2 h-2 rounded-full mt-1.5 shrink-0"
-                             style={{ background: logDot(log.event) }} />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-[12px] text-white/68 font-medium">{log.event}</p>
-                          <p className="text-[10px] text-white/28 mt-0.5 truncate">
-                            {log.userId}
-                            {' · '}
-                            {new Date(log.timestamp || log.createdAt).toLocaleString('en-KE', {
-                              timeZone: 'Africa/Nairobi',
-                            })}
-                            {log.metadata?.email && ` · ${log.metadata.email}`}
-                          </p>
-                        </div>
-                      </motion.div>
-                    ))}
-                  </div>
-                </div>
+                  <>
+                    <div className="rounded-2xl border border-white/8 overflow-hidden"
+                         style={{ background: C.slate }}>
+                      <div className="divide-y divide-white/5">
+                        {logsPg.items.map((log, i) => (
+                          <motion.div key={i}
+                            initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+                            transition={{ delay: i * 0.012 }}
+                            className="flex items-start gap-3 px-4 py-3
+                                       hover:bg-white/[0.02] transition-colors">
+                            <div className="w-2 h-2 rounded-full mt-1.5 shrink-0"
+                                 style={{ background: logDot(log.event) }} />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-[12px] text-white/68 font-medium">{log.event}</p>
+                              <p className="text-[10px] text-white/28 mt-0.5 truncate">
+                                {log.userId} · {parseLogDate(log)}{log.metadata?.email && ` · ${log.metadata.email}`}
+                              </p>
+                            </div>
+                          </motion.div>
+                        ))}
+                      </div>
+                    </div>
+                    <Pagination {...logsPg} onPage={logsPg.setPage} />
+                  </>
               )}
+            </motion.div>
+          )}
+          {/* ----------------------------------- ANALYTICS TAB/PANE ---------------------------------------------- */}
+
+          {activeTab === 'analytics' && (
+            <motion.div key="analytics"
+              initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.22 }}
+              className="space-y-4">
+              { <AnalyticsPanel /> }
+            </motion.div>
+          )}
+           {/* ----------------------------------- ALERTS TAB/PANE ---------------------------------------------- */}
+
+          {activeTab === 'alerts' && (
+            <motion.div key="alerts"
+              initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.22 }}
+              className="space-y-4">
+              { <AlertsPanel /> }
+            </motion.div>
+          )}
+            {/* ----------------------------------- QUOTES MANAGER TAB/PANE ---------------------------------------------- */}  
+          {activeTab === 'quotes' && (
+            <motion.div key="quotes"
+              initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.22 }}
+              className="space-y-4">
+              { <QuotesManagerPanel /> }
             </motion.div>
           )}
         </AnimatePresence>
