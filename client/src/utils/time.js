@@ -1,3 +1,4 @@
+/* ─── Timestamp normaliser ──────────────────────────────────── */
 export const toMs = (ts) => {
     if (!ts) return 0;
     if (ts?.toDate)    return ts.toDate().getTime();
@@ -6,3 +7,4 @@ export const toMs = (ts) => {
     const d = new Date(ts);
     return isNaN(d) ? 0 : d.getTime();
 };
+

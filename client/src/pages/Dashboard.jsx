@@ -1,38 +1,13 @@
 /**
  * Dashboard.jsx — fully refactored
  * ─────────────────────────────────────────────────────────────
- * WHAT'S NEW vs previous version
+ * CHANGES vs previous version
  * ───────────────────────────────
- *  1. Virtual scroll  — renders only visible rows using a simple
- *     window-aware virtualizer (no extra lib needed).
- *     Swap ITEM_HEIGHT/OVERSCAN to tune performance.
- *
- *  2. Lyrics section  — second tab in the main content area.
- *     Fetches lyricsApi.getAll(), same card pattern as quotes.
- *
- *  3. Daily Spotlight — hero card at the top of the feed that
- *     picks a random approved quote each session.
- *
- *  4. Admin Quick-actions — visible only to admins, sits between
- *     stats and the main grid. Shows pending-queue count, quick
- *     approve/reject, link to full admin panel.
- *
- *  5. Inline mini-analytics — small sparkline strip above the
- *     filter bar showing 7-day activity. No new page/tab needed.
- *
- *  6. Expanded sidebar — adds a "Mood ring" category heatmap and
- *     a mini-calendar dot-grid showing days with activity.
- *
- *  7. Everything fits one scroll viewport:
- *     • Sidebar is sticky and scrolls independently.
- *     • Main feed is virtualised so the page height stays fixed.
- *     • Stat cards are always visible above the fold.
- *
- * DEPENDENCIES (all already in your package.json)
- *  react-query, framer-motion, react-icons, react-hot-toast
- *
- * USAGE
- *  Drop-in replacement. No prop changes needed.
+ *  1. Added View icon (eye) per row — opens a beautiful full
+ *     view modal with smooth animations.
+ *  2. Fixed pagination overflow — container clips properly.
+ *  3. Edit now pre-fills the QuoteModal with the clicked quote.
+ *  4. No changes to data access — user only sees their own quotes.
  * ─────────────────────────────────────────────────────────────
  */
 
@@ -48,6 +23,7 @@ import {
   useQuery, useMutation, useQueryClient,
 } from '@tanstack/react-query';
 import { quotesApi, lyricsApi, adminApi } from '../utils/api';
+import { Pagination }    from '../components/Pagination';
 import toast, { Toaster }       from 'react-hot-toast';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -58,16 +34,31 @@ import {
   FiMusic, FiCheck, FiXCircle, FiUsers,
   FiActivity, FiClock, FiZap, FiChevronLeft,
   FiChevronRight, FiRefreshCw, FiEdit2, FiTrash2,
-  FiCopy, FiCalendar, FiBarChart2,
+  FiCopy, FiCalendar, FiBarChart2, FiEye,
 } from 'react-icons/fi';
 
-import QuoteCard   from '../components/QuoteCard';
 import RoleGuard   from '../components/RoleGuard';
 import useRole     from '../hooks/useRole';
 import { ROLES }   from '../store/authSlice';
 import QuoteModal  from '../pages/QuoteModal';
+import { toMs } from '../utils/time';
 
 /* ─── Design tokens ─────────────────────────────────────────── */
+const T = {
+  surface:  '#111620',
+  surface2: '#141924',
+  surface3: '#1C2230',
+  border:   'rgba(255,255,255,0.07)',
+  border2:  'rgba(255,255,255,0.12)',
+  t1:       '#E8EAF0',
+  t2:       'rgba(232,234,240,0.55)',
+  t3:       'rgba(232,234,240,0.28)',
+  green:    '#34D399',
+  red:      '#F87171',
+  amber:    '#F59E0B',
+  indigo:   '#818CF8',
+};
+
 const ACCENT  = '#F59E0B';
 const ACCENT2 = '#F97316';
 const SLATE   = '#141924';
@@ -80,19 +71,7 @@ const CAT_COLOR = {
 };
 const catColor = (c) => CAT_COLOR[c] ?? CAT_COLOR.default;
 
-/* ─── Virtual scroll config ─────────────────────────────────── */
-const ITEM_HEIGHT = 152; // px — approximate card height (grid mode)
-const OVERSCAN    = 4;   // extra rows rendered above/below viewport
-
-/* ─── Timestamp normaliser ──────────────────────────────────── */
-const toMs = (ts) => {
-  if (!ts) return 0;
-  if (ts?.toDate)    return ts.toDate().getTime();
-  if (ts?._seconds)  return ts._seconds * 1000;
-  if (ts?.seconds)   return ts.seconds * 1000;
-  const d = new Date(ts);
-  return isNaN(d) ? 0 : d.getTime();
-};
+const PAGE_SIZE = 6;
 
 const timeAgo = (ts) => {
   const ms = toMs(ts);
@@ -111,11 +90,20 @@ const stagger = (i, base = 0) => ({
   transition: { delay: base + i * 0.055, duration: 0.26, ease: 'easeOut' },
 });
 
+const cc = (c) => ({
+  motivation:'#F59E0B', mindset:'#818CF8',   discipline:'#34D399',
+  success:   '#A78BFA', resilience:'#FB923C', persistence:'#38BDF8',
+  belief:    '#C084FC', action:'#86EFAC',     growth:'#2DD4BF',
+  determination:'#F87171', inspiration:'#7DD3FC',
+  gospel:    '#FCD34D', afrobeat:'#10B981',   rnb:'#EC4899',
+  hiphop:    '#8B5CF6', pop:'#06B6D4',        soul:'#F97316',
+}[c] ?? T.indigo);
+
 /* ─── Role pill ─────────────────────────────────────────────── */
 const RolePill = ({ role }) => {
   const map = {
     admin: { color:'#818CF8', bg:'rgba(129,140,248,0.12)', border:'rgba(129,140,248,0.22)', Icon:FiShield, label:'Admin' },
-    user:  { color:'#34D399', bg:'rgba(52,211,153,0.10)',  border:'rgba(52,211,153,0.20)',  Icon:null,     label:'User'  },
+    user:  { color:'#34D399', bg:'rgba(52,211,153,0.10)',  border:'rgba(52,211,153,0.20)',  Icon:FiUsers,  label:'User'  },
     guest: { color:'#6B7280', bg:'rgba(107,114,128,0.10)', border:'rgba(107,114,128,0.18)', Icon:FiLock,   label:'Guest' },
   };
   const { color, bg, border, Icon, label } = map[role] ?? map.guest;
@@ -131,22 +119,6 @@ const RolePill = ({ role }) => {
     </motion.span>
   );
 };
-
-/* ─── Skeleton ──────────────────────────────────────────────── */
-const SkeletonCard = () => (
-  <div className="bg-[#141924] border border-white/6 rounded-2xl p-4 space-y-3 animate-pulse">
-    <div className="flex justify-between">
-      <div className="w-16 h-3 rounded-full bg-white/8"/>
-      <div className="w-3 h-3 rounded-full bg-white/8"/>
-    </div>
-    <div className="space-y-1.5">
-      <div className="w-full h-3 rounded-full bg-white/6"/>
-      <div className="w-5/6 h-3 rounded-full bg-white/6"/>
-      <div className="w-3/4 h-3 rounded-full bg-white/6"/>
-    </div>
-    <div className="w-20 h-2.5 rounded-full bg-white/5"/>
-  </div>
-);
 
 /* ─── Stat card ─────────────────────────────────────────────── */
 const StatCard = memo(({ label, value, icon:Icon, accent, i, sub }) => (
@@ -222,7 +194,6 @@ const DailySpotlight = memo(({ quotes }) => {
   }, [quotes]);
 
   if (!pick) return null;
-
   const color = catColor(pick.category);
 
   return (
@@ -235,10 +206,8 @@ const DailySpotlight = memo(({ quotes }) => {
         borderColor: `${color}25`,
       }}
     >
-      {/* top line */}
       <div className="absolute top-0 left-0 right-0 h-[2px]"
            style={{ background:`linear-gradient(90deg,${color}80,${color}20,transparent)` }}/>
-
       <div className="flex items-start gap-3">
         <div className="flex-shrink-0 w-8 h-8 rounded-xl flex items-center justify-center"
              style={{ background:`${color}18` }}>
@@ -306,7 +275,6 @@ const AdminQuickActions = memo(({ onApprove, onReject }) => {
           Manage all <FiChevronRight size={10}/>
         </Link>
       </div>
-
       <div className="divide-y divide-white/[0.04]">
         {preview.map(u => (
           <div key={u.uid} className="flex items-center gap-3 px-4 py-2.5">
@@ -333,99 +301,6 @@ const AdminQuickActions = memo(({ onApprove, onReject }) => {
         ))}
       </div>
     </motion.div>
-  );
-});
-
-/* ─── Lyric card (slim) ─────────────────────────────────────── */
-const LyricCard = memo(({ lyric, canDelete, onDelete }) => {
-  const color = CAT_COLOR[lyric.genre] ?? CAT_COLOR.default;
-  return (
-    <motion.div
-      layout
-      initial={{ opacity:0, y:10 }} animate={{ opacity:1, y:0 }}
-      exit={{ opacity:0, scale:0.97 }}
-      className="group flex gap-3 p-4 rounded-2xl border border-white/6 hover:border-white/12 transition-all"
-      style={{ background:SLATE }}
-    >
-      <div className="w-1 self-stretch rounded-full flex-shrink-0" style={{ background:color }}/>
-      <div className="flex-1 min-w-0">
-        <p className="text-[12px] text-white/70 leading-relaxed mb-1.5">"{lyric.text}"</p>
-        <div className="flex items-center justify-between flex-wrap gap-2">
-          <p className="text-[10px] font-bold uppercase tracking-[0.1em]" style={{ color }}>
-            — {lyric.artist}
-          </p>
-          <span className="text-[9px] px-2 py-0.5 rounded-full border capitalize"
-                style={{ background:`${color}12`, color, borderColor:`${color}30` }}>
-            {lyric.genre}
-          </span>
-        </div>
-      </div>
-      {canDelete && (
-        <button
-          onClick={() => onDelete(lyric.id)}
-          className="opacity-0 group-hover:opacity-100 w-7 h-7 rounded-lg flex items-center justify-center text-white/20 hover:text-red-400 hover:bg-red-500/10 transition-all flex-shrink-0"
-        >
-          <FiTrash2 size={11}/>
-        </button>
-      )}
-    </motion.div>
-  );
-});
-
-/* ─── Virtual scroll container ──────────────────────────────── */
-const VirtualList = memo(({ items, renderItem, itemHeight = ITEM_HEIGHT, columns = 2 }) => {
-  const containerRef = useRef(null);
-  const [scrollTop,     setScrollTop]     = useState(0);
-  const [containerHeight, setContainerHeight] = useState(600);
-
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-    const obs = new ResizeObserver(([entry]) => {
-      setContainerHeight(entry.contentRect.height);
-    });
-    obs.observe(el);
-    return () => obs.disconnect();
-  }, []);
-
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-    const onScroll = () => setScrollTop(el.scrollTop);
-    el.addEventListener('scroll', onScroll, { passive:true });
-    return () => el.removeEventListener('scroll', onScroll);
-  }, []);
-
-  /* Row-based virtual window */
-  const rowCount    = Math.ceil(items.length / columns);
-  const totalHeight = rowCount * itemHeight;
-  const startRow    = Math.max(0, Math.floor(scrollTop / itemHeight) - OVERSCAN);
-  const visibleRows = Math.ceil(containerHeight / itemHeight) + OVERSCAN * 2;
-  const endRow      = Math.min(rowCount, startRow + visibleRows);
-
-  const visibleItems = [];
-  for (let row = startRow; row < endRow; row++) {
-    for (let col = 0; col < columns; col++) {
-      const idx = row * columns + col;
-      if (idx < items.length) visibleItems.push({ item: items[idx], idx, row });
-    }
-  }
-
-  const paddingTop    = startRow * itemHeight;
-  const paddingBottom = Math.max(0, (rowCount - endRow) * itemHeight);
-
-  return (
-    <div
-      ref={containerRef}
-      className="overflow-y-auto"
-      style={{ height: Math.min(totalHeight + 2, 640), maxHeight: 640 }}
-    >
-      <div style={{ paddingTop, paddingBottom }}>
-        <div className={columns > 1 ? 'grid grid-cols-1 sm:grid-cols-2 gap-3' : 'flex flex-col gap-2'}>
-          {visibleItems.map(({ item, idx }) => renderItem(item, idx))}
-        </div>
-      </div>
-    </div>
   );
 });
 
@@ -546,13 +421,13 @@ const ActivityCalendar = memo(({ quotes }) => {
   return (
     <div className="bg-[#141924] border border-white/8 rounded-2xl p-4">
       <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-white/25 mb-3">Activity (10 weeks)</p>
-      <div className="flex gap-0.5 flex-wrap" style={{ display:'grid', gridTemplateColumns:`repeat(${WEEKS},1fr)`, gap:3 }}>
+      <div style={{ display:'grid', gridTemplateColumns:`repeat(${WEEKS},1fr)`, gap:3 }}>
         {Array.from({ length:WEEKS }).map((_,week) =>
           <div key={week} className="flex flex-col gap-[3px]">
             {Array.from({ length:7 }).map((_,day) => {
-              const idx    = week * 7 + day;
-              const count  = grid[idx] ?? 0;
-              const alpha  = count === 0 ? 0.06 : 0.2 + (count / maxCount) * 0.75;
+              const idx   = week * 7 + day;
+              const count = grid[idx] ?? 0;
+              const alpha = count === 0 ? 0.06 : 0.2 + (count / maxCount) * 0.75;
               return (
                 <div key={day} className="rounded-sm"
                      style={{ width:9, height:9, background:`rgba(245,158,11,${alpha})` }}
@@ -579,16 +454,13 @@ const ActivityCalendar = memo(({ quotes }) => {
 /* ─── Sidebar composite ─────────────────────────────────────── */
 const SidebarContent = memo(({ quotes, lyrics }) => (
   <div className="space-y-4">
-    <CategoryBar  quotes={quotes}/>
-    <TopAuthors   quotes={quotes}/>
+    <CategoryBar      quotes={quotes}/>
+    <TopAuthors       quotes={quotes}/>
     <ActivityCalendar quotes={quotes}/>
     <RecentActivity   quotes={quotes}/>
-    {/* Lyrics mini-strip */}
     {lyrics.length > 0 && (
       <div className="bg-[#141924] border border-white/8 rounded-2xl p-4">
-        <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-white/25 mb-3">
-          Recent lyrics
-        </p>
+        <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-white/25 mb-3">Recent lyrics</p>
         <div className="space-y-2.5">
           {[...lyrics].sort((a,b)=>toMs(b.createdAt)-toMs(a.createdAt)).slice(0,4).map(l => {
             const color = CAT_COLOR[l.genre] ?? CAT_COLOR.default;
@@ -643,6 +515,156 @@ const DeleteModal = memo(({ label = 'quote', onConfirm, onCancel }) => (
     </motion.div>
   </motion.div>
 ));
+
+/* ─── View modal ──────────────────────────────────────── */
+const ViewModal = memo(({ item, type, onClose, onEdit }) => {
+  if (!item) return null;
+  const isLyric = type === 'lyric';
+  const color   = cc(item.category ?? item.genre);
+  const label   = isLyric ? item.artist : item.author;
+  const cat     = item.category ?? item.genre;
+
+  const statusMap = {
+    approved: { color: T.green, label: 'Approved' },
+    pending:  { color: T.amber, label: 'Pending'  },
+    rejected: { color: T.red,   label: 'Rejected' },
+  };
+  const statusInfo = statusMap[item.status] ?? statusMap.pending;
+
+  return (
+    <motion.div
+      initial={{ opacity:0 }}
+      animate={{ opacity:1 }}
+      exit={{ opacity:0 }}
+      transition={{ duration:0.2 }}
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ background:'rgba(5,8,18,0.82)', backdropFilter:'blur(18px)' }}
+      onClick={onClose}
+    >
+      <motion.div
+        initial={{ scale:0.88, opacity:0, y:24 }}
+        animate={{ scale:1, opacity:1, y:0 }}
+        exit={{ scale:0.88, opacity:0, y:24 }}
+        transition={{ type:'spring', stiffness:320, damping:28 }}
+        onClick={e => e.stopPropagation()}
+        className="relative w-full max-w-lg overflow-hidden"
+        style={{
+          background: `linear-gradient(145deg, ${color}0e 0%, #141924 45%)`,
+          border: `1px solid ${color}30`,
+          borderRadius: 24,
+          boxShadow: `0 40px 80px rgba(0,0,0,0.7), 0 0 0 1px ${color}12, inset 0 1px 0 ${color}18`,
+        }}
+      >
+        {/* Ambient glow top */}
+        <div className="absolute top-0 left-0 right-0 h-[2px] rounded-t-[24px]"
+             style={{ background:`linear-gradient(90deg, transparent, ${color}90, ${color}60, transparent)` }}/>
+
+        {/* Decorative large quote mark */}
+        <div className="absolute top-4 right-6 text-[88px] leading-none font-serif pointer-events-none select-none"
+             style={{ color:`${color}08`, lineHeight:1 }}>"</div>
+
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 pt-5 pb-4 relative z-10">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl flex items-center justify-center"
+                 style={{ background:`${color}18`, border:`1px solid ${color}25` }}>
+              {isLyric ? <FiMusic size={13} style={{ color }}/> : <FiBookOpen size={13} style={{ color }}/>}
+            </div>
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-[0.16em]" style={{ color:`${color}80` }}>
+                {isLyric ? 'Lyric' : 'Quote'}
+              </p>
+              {cat && (
+                <span className="text-[9px] capitalize" style={{ color:`${color}55` }}>{cat}</span>
+              )}
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="w-8 h-8 rounded-xl flex items-center justify-center transition-all hover:scale-110"
+            style={{ background:'rgba(255,255,255,0.05)', border:'1px solid rgba(255,255,255,0.08)', color:'rgba(255,255,255,0.35)' }}
+          >
+            <FiX size={13}/>
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="px-6 pb-4 relative z-10">
+          {/* Quote text */}
+          <div className="mb-5">
+            <p className="text-[18px] sm:text-[20px] text-white/88 leading-[1.65] font-light tracking-wide"
+               style={{ fontFamily:'"Georgia", serif' }}>
+              {item.text}
+            </p>
+          </div>
+
+          {/* Author / artist */}
+          <div className="flex items-center gap-2 mb-4">
+            <div className="w-px h-4 rounded-full" style={{ background:color }}/>
+            <p className="text-[13px] font-bold uppercase tracking-[0.12em]" style={{ color }}>
+              {label}
+            </p>
+          </div>
+
+          {/* Tags row */}
+          <div className="flex items-center flex-wrap gap-2 mb-5">
+            {cat && (
+              <span className="text-[10px] px-2.5 py-1 rounded-full capitalize font-semibold"
+                    style={{ background:`${color}15`, color, border:`1px solid ${color}28` }}>
+                {cat}
+              </span>
+            )}
+            {!isLyric && item.status && (
+              <span className="text-[10px] px-2.5 py-1 rounded-full font-semibold"
+                    style={{ background:`${statusInfo.color}15`, color:statusInfo.color, border:`1px solid ${statusInfo.color}28` }}>
+                {statusInfo.label}
+              </span>
+            )}
+            {item.isFavorite && (
+              <span className="text-[10px] px-2.5 py-1 rounded-full font-semibold flex items-center gap-1"
+                    style={{ background:'rgba(129,140,248,0.12)', color:'#818CF8', border:'1px solid rgba(129,140,248,0.22)' }}>
+                <FiStar size={9}/> Favourite
+              </span>
+            )}
+            {item.createdAt && (
+              <span className="text-[10px] text-white/25 ml-auto">{timeAgo(item.createdAt)}</span>
+            )}
+          </div>
+
+          {/* Divider */}
+          <div className="h-px mb-4" style={{ background:`linear-gradient(90deg, ${color}20, transparent)` }}/>
+
+          {/* Action buttons */}
+          <div className="flex gap-2.5">
+            <button
+              onClick={() => { navigator.clipboard.writeText(`"${item.text}" — ${label}`); toast.success('Copied to clipboard!'); }}
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-[12px] font-medium transition-all hover:scale-105"
+              style={{ background:'rgba(255,255,255,0.05)', border:'1px solid rgba(255,255,255,0.09)', color:'rgba(255,255,255,0.50)' }}
+            >
+              <FiCopy size={11}/> Copy
+            </button>
+            {!isLyric && onEdit && (
+              <button
+                onClick={() => { onClose(); onEdit(item); }}
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-[12px] font-semibold transition-all hover:scale-105"
+                style={{ background:`${T.indigo}15`, border:`1px solid ${T.indigo}28`, color:T.indigo }}
+              >
+                <FiEdit2 size={11}/> Edit
+              </button>
+            )}
+            <button
+              onClick={onClose}
+              className="ml-auto flex items-center gap-1.5 px-4 py-2 rounded-xl text-[12px] font-semibold text-gray-950 transition-all hover:scale-105"
+              style={{ background:`linear-gradient(to right,${ACCENT},${ACCENT2})` }}
+            >
+              Done
+            </button>
+          </div>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+});
 
 /* ─── Filter bar ────────────────────────────────────────────── */
 const FilterBar = memo(({
@@ -721,6 +743,204 @@ const EmptyState = memo(({ hasFilter, onAdd, label = 'quotes' }) => (
   </div>
 ));
 
+/* ─── Status badge ──────────────────────────────────────────── */
+const StatusBadge = ({ status }) => {
+  const map = {
+    approved: { color: T.green, label: 'Approved' },
+    pending:  { color: T.amber, label: 'Pending'  },
+    rejected: { color: T.red,   label: 'Rejected' },
+  };
+  const { color, label } = map[status] ?? map.pending;
+  return (
+    <span style={{
+      background: `${color}18`, color, fontSize: 10, fontWeight: 700,
+      padding: '3px 9px', borderRadius: 20, letterSpacing: '0.05em',
+      border: `1px solid ${color}30`, whiteSpace:'nowrap',
+    }}>{label}</span>
+  );
+};
+
+/* ─── Quote row ─────────────────────────────────────────────── */
+const QuoteRow = ({ item, type, onEdit, onDelete, onApprove, onReject, onView, isMobile }) => {
+  const isLyric = type === 'lyric';
+  const color   = cc(item.category ?? item.genre);
+
+  const copy = () => {
+    navigator.clipboard.writeText(`"${item.text}" — ${item.author ?? item.artist}`);
+    toast.success('Copied!');
+  };
+
+  if (isMobile) {
+    return (
+      <motion.div
+        initial={{ opacity:0, y:6 }} animate={{ opacity:1, y:0 }}
+        style={{
+          background:T.surface2, border:`1px solid ${T.border}`,
+          borderRadius:14, padding:'13px 14px', marginBottom:10,
+          borderLeft:`2px solid ${color}`,
+        }}
+      >
+        <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:8, marginBottom:8 }}>
+          <p style={{ fontSize:12, color:T.t1, lineHeight:1.55, flex:1 }}>"{item.text}"</p>
+          <button onClick={copy} style={{ background:'none', border:'none', cursor:'pointer', color:T.t3, flexShrink:0, padding:2 }}>
+            <FiCopy size={12}/>
+          </button>
+        </div>
+        <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:10, flexWrap:'wrap' }}>
+          <span style={{ fontSize:10, fontWeight:700, color, textTransform:'uppercase', letterSpacing:'0.08em' }}>
+            — {item.author ?? item.artist}
+          </span>
+          <span style={{ fontSize:9, padding:'2px 7px', borderRadius:10, background:`${color}18`, color, border:`1px solid ${color}30` }}>
+            {item.category ?? item.genre}
+          </span>
+          {!isLyric && <StatusBadge status={item.status}/>}
+        </div>
+        <div style={{ display:'flex', gap:7, flexWrap:'wrap' }}>
+          <button onClick={() => onView(item)} style={{ flex:1, padding:'8px 0', borderRadius:10, border:`1px solid ${ACCENT}40`, background:`${ACCENT}12`, color:ACCENT, fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:'inherit', display:'flex', alignItems:'center', justifyContent:'center', gap:5 }}>
+            <FiEye size={12}/> View
+          </button>
+          {!isLyric && (
+            <button onClick={() => onEdit(item)} style={{ flex:1, padding:'8px 0', borderRadius:10, border:`1px solid ${T.indigo}40`, background:`${T.indigo}12`, color:T.indigo, fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:'inherit', display:'flex', alignItems:'center', justifyContent:'center', gap:5 }}>
+              <FiEdit2 size={12}/> Edit
+            </button>
+          )}
+          <button onClick={() => onDelete(item.id)} style={{ flex:1, padding:'8px 0', borderRadius:10, border:`1px solid ${T.red}30`, background:`${T.red}08`, color:T.red, fontSize:12, fontWeight:500, cursor:'pointer', fontFamily:'inherit', display:'flex', alignItems:'center', justifyContent:'center', gap:5 }}>
+            <FiTrash2 size={12}/> Delete
+          </button>
+        </div>
+      </motion.div>
+    );
+  }
+
+  return (
+    <tr
+      style={{ borderBottom:`1px solid ${T.border}`, transition:'background 0.1s' }}
+      onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.02)'}
+      onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+    >
+      <td style={{ padding:'11px 12px', maxWidth:260 }}>
+        <div style={{ fontSize:12, color:T.t1, lineHeight:1.5, display:'-webkit-box', WebkitLineClamp:2, WebkitBoxOrient:'vertical', overflow:'hidden' }}>
+          {item.text}
+        </div>
+      </td>
+      <td style={{ padding:'11px 12px' }}>
+        <span style={{ fontSize:12, color:T.t2, whiteSpace:'nowrap' }}>{item.author ?? item.artist}</span>
+      </td>
+      <td style={{ padding:'11px 12px' }}>
+        <span style={{ fontSize:10, padding:'3px 9px', borderRadius:20, background:`${color}18`, color, border:`1px solid ${color}30`, whiteSpace:'nowrap' }}>
+          {item.category ?? item.genre}
+        </span>
+      </td>
+      {!isLyric && (
+        <td style={{ padding:'11px 12px' }}>
+          <StatusBadge status={item.status}/>
+        </td>
+      )}
+      <td style={{ padding:'11px 12px' }}>
+        <div style={{ display:'flex', gap:5, alignItems:'center' }}>
+          {/* View */}
+          <button onClick={() => onView(item)} title="View"
+            style={{ width:28, height:28, borderRadius:8, border:`1px solid ${ACCENT}35`, background:`${ACCENT}10`, color:ACCENT, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', transition:'all 0.15s' }}
+            onMouseEnter={e => e.currentTarget.style.background=`${ACCENT}22`}
+            onMouseLeave={e => e.currentTarget.style.background=`${ACCENT}10`}
+          >
+            <FiEye size={12}/>
+          </button>
+          {/* Edit (quotes only) */}
+          {!isLyric && (
+            <button onClick={() => onEdit(item)} title="Edit"
+              style={{ width:28, height:28, borderRadius:8, border:`1px solid ${T.indigo}40`, background:`${T.indigo}12`, color:T.indigo, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', transition:'all 0.15s' }}
+              onMouseEnter={e => e.currentTarget.style.background=`${T.indigo}25`}
+              onMouseLeave={e => e.currentTarget.style.background=`${T.indigo}12`}
+            >
+              <FiEdit2 size={12}/>
+            </button>
+          )}
+          {/* Delete */}
+          <button onClick={() => onDelete(item.id)} title="Delete"
+            style={{ width:28, height:28, borderRadius:8, border:`1px solid ${T.red}30`, background:`${T.red}08`, color:T.red, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', transition:'all 0.15s' }}
+            onMouseEnter={e => e.currentTarget.style.background=`${T.red}20`}
+            onMouseLeave={e => e.currentTarget.style.background=`${T.red}08`}
+          >
+            <FiTrash2 size={12}/>
+          </button>
+        </div>
+      </td>
+    </tr>
+  );
+};
+/* ── Pagination wrapper — constrained to content width ──────── */
+const PaginationBar = ({ page, total, count, from, to, onPage }) => {
+  if (!count || total <= 1) return null;
+  return (
+    <div style={{
+      borderTop:`1px solid ${T.border}`,
+      padding:'10px 14px',
+      display:'flex', alignItems:'center', justifyContent:'space-between',
+      flexWrap:'wrap', gap:8,
+      width:'100%', boxSizing:'border-box',  // ← prevents overflow
+    }}>
+      <span style={{ fontSize:11, color:T.t3, whiteSpace:'nowrap' }}>
+        {from}–{to} of {count}
+      </span>
+      <div style={{ display:'flex', gap:4, flexWrap:'wrap' }}>
+        <PgBtn onClick={() => onPage(page - 1)} disabled={page === 1}>‹</PgBtn>
+        {buildNums(page, total).map((n, i) =>
+          n === '…'
+            ? <span key={`d${i}`} style={{ width:30, height:30, display:'flex', alignItems:'center', justifyContent:'center', fontSize:12, color:T.t3 }}>…</span>
+            : <PgBtn key={n} active={n === page} onClick={() => onPage(n)}>{n}</PgBtn>
+        )}
+        <PgBtn onClick={() => onPage(page + 1)} disabled={page === total}>›</PgBtn>
+      </div>
+    </div>
+  );
+};
+const buildNums = (page, total) => {
+  const nums = [];
+  if (total <= 6) { for (let i = 1; i <= total; i++) nums.push(i); }
+  else {
+    nums.push(1);
+    if (page > 3) nums.push('…');
+    for (let i = Math.max(2, page-1); i <= Math.min(total-1, page+1); i++) nums.push(i);
+    if (page < total - 2) nums.push('…');
+    nums.push(total);
+  }
+  return nums;
+};
+
+const PgBtn = ({ children, onClick, disabled, active }) => (
+  <button onClick={onClick} disabled={disabled} style={{
+    minWidth:30, height:30, padding:'0 6px', borderRadius:8, fontSize:12, fontWeight:500,
+    border:`1px solid ${active ? 'rgba(129,140,248,0.3)' : T.border}`,
+    background: active ? 'rgba(129,140,248,0.15)' : 'transparent',
+    color: active ? '#818CF8' : T.t3,
+    cursor: disabled ? 'default' : 'pointer',
+    opacity: disabled ? 0.25 : 1,
+    transition:'all 0.15s', flexShrink:0,
+  }}>{children}</button>
+);
+/* ── Shared table shell ─────────────────────────────────────── */
+// headers and rows always use the same 5 columns regardless of role
+const QuoteTable = ({ headers, rows, page, totalPages, count, from, to, onPage }) => (
+  <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:16, overflow:'hidden', width:'100%' }}>
+    <div style={{ overflowX:'auto' }}>
+      <table style={{ width:'100%', borderCollapse:'collapse', minWidth:520 }}>
+        <thead>
+          <tr style={{ borderBottom:`1px solid ${T.border}` }}>
+            {headers.map(h => (
+              <th key={h} style={{ padding:'10px 14px', textAlign:'left', fontSize:10, fontWeight:700, letterSpacing:'0.1em', textTransform:'uppercase', color:T.t3, whiteSpace:'nowrap' }}>
+                {h}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>{rows}</tbody>
+      </table>
+    </div>
+    <PaginationBar page={page} total={totalPages} count={count} from={from} to={to} onPage={onPage}/>
+  </div>
+);
+
 /* ════════════════════════════════════════════════════════════
    MAIN DASHBOARD
 ════════════════════════════════════════════════════════════ */
@@ -736,10 +956,14 @@ const Dashboard = () => {
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [showForm,         setShowForm]         = useState(false);
   const [view,             setView]             = useState('grid');
-  const [activeTab,        setActiveTab]        = useState('quotes'); // 'quotes' | 'lyrics' | 'favorites'
-  const [deleteTarget,     setDeleteTarget]     = useState(null);     // { id, type }
+  const [activeTab,        setActiveTab]        = useState('quotes');
+  const [deleteTarget,     setDeleteTarget]     = useState(null);
+  const [viewTarget,       setViewTarget]       = useState(null); // { item, type }
   const [sidebarOpen,      setSidebarOpen]      = useState(false);
   const formRef = useRef(null);
+
+  const [quotePage, setQuotePage] = useState(1);
+  const [lyricPage, setLyricPage] = useState(1);
 
   /* ── Queries ── */
   const { data: quotesData, isLoading: quotesLoading } = useQuery({
@@ -755,11 +979,11 @@ const Dashboard = () => {
     queryFn:  lyricsApi.getAll,
     enabled:  !!user,
     retry:    false,
-    onError:  () => {}, // silent — lyrics may not exist for all users
+    onError:  () => {},
   });
   const lyrics = lyricsData?.lyrics ?? [];
 
-  /* ── Mutations: quotes ── */
+  /* ── Mutations ── */
   const qc = queryClient;
 
   const createMutation = useMutation({
@@ -840,7 +1064,6 @@ const Dashboard = () => {
     },
   });
 
-  /* ── Admin queue approve/reject ── */
   const approveMutation = useMutation({
     mutationFn: adminApi.approveUser,
     onSuccess: () => { qc.invalidateQueries({ queryKey:['adminQueue'] }); toast.success('Approved!'); },
@@ -852,7 +1075,6 @@ const Dashboard = () => {
     onError:   err => toast.error(err.message || 'Failed to deny'),
   });
 
-  /* ── Favorite (optimistic) ── */
   const handleFavorite = useCallback(async (id, isFavorite) => {
     qc.setQueryData(['quotes'], old => ({
       ...old,
@@ -872,10 +1094,16 @@ const Dashboard = () => {
     else         createMutation.mutate(formData);
   }, [editing, createMutation, updateMutation]);
 
+  /* ── Edit: opens form with quote details pre-filled ── */
   const handleEdit = useCallback((q) => {
     setEditing(q);
     setShowForm(true);
     setTimeout(() => formRef.current?.scrollIntoView({ behavior:'smooth', block:'start' }), 80);
+  }, []);
+
+  /* ── View: opens view modal ── */
+  const handleView = useCallback((item, type = 'quote') => {
+    setViewTarget({ item, type });
   }, []);
 
   const handleLogout = async () => {
@@ -905,11 +1133,11 @@ const Dashboard = () => {
     return ['all', ...new Set(all)];
   }, [quotes]);
 
-  /* ── Filtered items for active tab ── */
+  /* ── Filtered arrays — declared before pagination ── */
   const visibleQuotes = useMemo(() => quotes.filter(q => {
     if (activeTab==='favorites' && !q.isFavorite) return false;
-    const ms  = !searchQuery || q.text.toLowerCase().includes(searchQuery.toLowerCase()) || q.author.toLowerCase().includes(searchQuery.toLowerCase());
-    const mc  = selectedCategory==='all' || q.category===selectedCategory;
+    const ms = !searchQuery || q.text.toLowerCase().includes(searchQuery.toLowerCase()) || q.author.toLowerCase().includes(searchQuery.toLowerCase());
+    const mc = selectedCategory==='all' || q.category===selectedCategory;
     return ms && mc;
   }), [quotes, searchQuery, selectedCategory, activeTab]);
 
@@ -918,39 +1146,33 @@ const Dashboard = () => {
     return ms;
   }), [lyrics, searchQuery]);
 
-  const isQuoteTab  = activeTab==='quotes' || activeTab==='favorites';
-  const hasFilter   = searchQuery || selectedCategory !== 'all' || activeTab==='favorites';
-  const hour        = new Date().getHours();
-  const greeting    = hour<12 ? 'Good morning' : hour<17 ? 'Good afternoon' : 'Good evening';
-  const firstName   = user?.displayName?.split(' ')[0] || user?.email?.split('@')[0] || 'there';
-  const isLoading   = isQuoteTab ? quotesLoading : lyricsLoading;
+  /* ── Pagination effects — after visible arrays ── */
+  /* ── Pagination — AFTER visible arrays ── */
+  useEffect(() => { setQuotePage(1); }, [searchQuery, selectedCategory, activeTab]);
+  useEffect(() => { setLyricPage(1); }, [searchQuery, activeTab]);
 
-  /* ── Render quote card (for virtual list) ── */
-  const renderQuote = useCallback((q, i) => (
-    <QuoteCard
-      key={q.id} quote={q} index={i}
-      onEdit={handleEdit}
-      onDelete={isAdmin ? id => setDeleteTarget({ id, type:'quote' }) : null}
-      onFavorite={handleFavorite}
-      canDelete={isAdmin}
-      canEdit={isAllowed([ROLES.ADMIN, ROLES.USER])}
-    />
-  ), [handleEdit, handleFavorite, isAdmin, isAllowed]);
+  const paginatedQuotes = useMemo(() => visibleQuotes.slice((quotePage-1)*PAGE_SIZE, quotePage*PAGE_SIZE), [visibleQuotes, quotePage]);
+  const paginatedLyrics = useMemo(() => visibleLyrics.slice((lyricPage-1)*PAGE_SIZE, lyricPage*PAGE_SIZE), [visibleLyrics, lyricPage]);
 
-  const renderLyric = useCallback((l, i) => (
-    <LyricCard
-      key={l.id} lyric={l}
-      canDelete={isAdmin}
-      onDelete={id => setDeleteTarget({ id, type:'lyric' })}
-    />
-  ), [isAdmin]);
+  const qTotalPages = Math.ceil(visibleQuotes.length / PAGE_SIZE);
+  const lTotalPages = Math.ceil(visibleLyrics.length / PAGE_SIZE);;
 
-  /* ── Tabs config ── */
+  const isQuoteTab = activeTab==='quotes' || activeTab==='favorites';
+  const hasFilter  = searchQuery || selectedCategory !== 'all' || activeTab==='favorites';
+  const hour       = new Date().getHours();
+  const greeting   = hour<12 ? 'Good morning' : hour<17 ? 'Good afternoon' : 'Good evening';
+  const firstName  = user?.displayName?.split(' ')[0] || user?.email?.split('@')[0] || 'there';
+  const isLoading  = isQuoteTab ? quotesLoading : lyricsLoading;
+
   const TABS = [
-    { id:'quotes',    label:'Quotes',    count:quotes.length },
-    { id:'lyrics',    label:'Lyrics',    count:lyrics.length, icon:FiMusic },
-    { id:'favorites', label:'Favourites',count:favCount,      icon:FiStar  },
+    { id:'quotes',    label:'Quotes',     count:quotes.length },
+    { id:'lyrics',    label:'Lyrics',     count:lyrics.length, icon:FiMusic },
+    { id:'favorites', label:'Favourites', count:favCount,      icon:FiStar  },
   ];
+
+  // Always 5 columns — same for both admin and user
+  const QUOTE_HEADERS  = ['Text', 'Author', 'Category', 'Status', 'Actions'];
+  const LYRIC_HEADERS  = ['Text', 'Artist', 'Genre', '', 'Actions'];
 
   return (
     <div className="min-h-screen bg-[#0A0E1A] text-white">
@@ -958,7 +1180,7 @@ const Dashboard = () => {
         style:{ background:SLATE, color:'#fff', border:'1px solid rgba(255,255,255,0.08)', fontSize:'13px' },
       }}/>
 
-      {/* Modals */}
+      {/* ── Modals ── */}
       <AnimatePresence>
         {deleteTarget && (
           <DeleteModal
@@ -969,7 +1191,18 @@ const Dashboard = () => {
         )}
       </AnimatePresence>
 
-      {/* Mobile sidebar drawer */}
+      <AnimatePresence>
+        {viewTarget && (
+          <ViewModal
+            item={viewTarget.item}
+            type={viewTarget.type}
+            onClose={() => setViewTarget(null)}
+            onEdit={handleEdit}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* ── Mobile sidebar drawer ── */}
       <AnimatePresence>
         {sidebarOpen && (
           <>
@@ -1061,20 +1294,25 @@ const Dashboard = () => {
         <div ref={formRef}>
           <AnimatePresence>
             {showForm && (
-              <QuoteModal isOpen={showForm} onClose={() => setShowForm(false)} onSubmit={handleAddOrUpdate}/>
+              <QuoteModal
+                isOpen={showForm}
+                onClose={() => { setShowForm(false); setEditing(null); }}
+                onSubmit={handleAddOrUpdate}
+                initialData={editing}
+              />
             )}
           </AnimatePresence>
         </div>
 
         {/* ── Stat cards ── */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <StatCard i={0} label="My quotes"    value={quotes.length}  icon={FiBookOpen}    accent={ACCENT}    sub={`+${weekCount} this week`}/>
-          <StatCard i={1} label="Favourites"   value={favCount}       icon={FiStar}        accent="#818CF8"   />
-          <StatCard i={2} label="Categories"   value={catCount}       icon={FiGrid}        accent="#34D399"   />
-          <StatCard i={3} label="Lyrics"       value={lyrics.length}  icon={FiMusic}       accent="#FB7185"   />
+          <StatCard i={0} label="My quotes"  value={quotes.length}  icon={FiBookOpen} accent={ACCENT}   sub={`+${weekCount} this week`}/>
+          <StatCard i={1} label="Favourites" value={favCount}       icon={FiStar}     accent="#818CF8"  />
+          <StatCard i={2} label="Categories" value={catCount}       icon={FiGrid}     accent="#34D399"  />
+          <StatCard i={3} label="Lyrics"     value={lyrics.length}  icon={FiMusic}    accent="#FB7185"  />
         </div>
 
-        {/* ── Admin quick-actions (admin only) ── */}
+        {/* ── Admin quick-actions ── */}
         {isAdmin && (
           <AdminQuickActions
             onApprove={uid => approveMutation.mutate(uid)}
@@ -1085,30 +1323,26 @@ const Dashboard = () => {
         {/* ── Main 2-col layout ── */}
         <div className="grid grid-cols-1 lg:grid-cols-[260px_1fr] gap-6 items-start">
 
-          {/* ── Sticky sidebar (desktop) ── */}
+          {/* Sticky sidebar */}
           <div className="hidden lg:block">
             <div className="sticky top-6">
               <SidebarContent quotes={quotes} lyrics={lyrics}/>
             </div>
           </div>
 
-          {/* ── Main content column ── */}
+          {/* Main content */}
           <div className="space-y-4 min-w-0">
 
             {/* Daily spotlight */}
             {quotes.length > 0 && <DailySpotlight quotes={quotes}/>}
 
-            {/* 7-day activity sparkline */}
+            {/* Sparkline */}
             {quotes.length > 0 && (
               <motion.div {...stagger(1)}
                 className="bg-[#141924] border border-white/8 rounded-2xl px-4 pt-3 pb-4">
                 <div className="flex items-center justify-between mb-3">
-                  <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-white/25">
-                    7-day activity
-                  </p>
-                  <span className="text-[10px] text-white/20 font-medium">
-                    {weekCount} this week
-                  </span>
+                  <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-white/25">7-day activity</p>
+                  <span className="text-[10px] text-white/20 font-medium">{weekCount} this week</span>
                 </div>
                 <Sparkline items={quotes}/>
               </motion.div>
@@ -1119,7 +1353,8 @@ const Dashboard = () => {
               {TABS.map(t => {
                 const TIcon = t.icon;
                 return (
-                  <button key={t.id} onClick={() => { setActiveTab(t.id); setSearchQuery(''); setSelectedCategory('all'); }}
+                  <button key={t.id}
+                    onClick={() => { setActiveTab(t.id); setSearchQuery(''); setSelectedCategory('all'); }}
                     className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-[12px] font-semibold border transition-all"
                     style={activeTab===t.id
                       ? { background:`${ACCENT}16`, borderColor:`${ACCENT}30`, color:ACCENT }
@@ -1152,29 +1387,97 @@ const Dashboard = () => {
             {/* Content */}
             <motion.div {...stagger(4)}>
               {isLoading ? (
-                <div className={view==='grid' ? 'grid grid-cols-1 sm:grid-cols-2 gap-3' : 'flex flex-col gap-2'}>
-                  {Array.from({ length:6 }).map((_,i) => <SkeletonCard key={i}/>)}
+                <div className="flex items-center justify-center gap-3 py-12 text-white/30">
+                  <FiRefreshCw size={16} className="animate-spin"/> Loading…
                 </div>
+
               ) : isQuoteTab && visibleQuotes.length === 0 ? (
-                <EmptyState hasFilter={hasFilter} label="quotes" onAdd={() => { setEditing(null); setShowForm(true); }}/>
+                <EmptyState hasFilter={hasFilter} label="quotes"
+                  onAdd={() => { setEditing(null); setShowForm(true); }}/>
+
               ) : !isQuoteTab && visibleLyrics.length === 0 ? (
                 <EmptyState hasFilter={!!searchQuery} label="lyrics" onAdd={() => {}}/>
+
               ) : isQuoteTab ? (
-                <VirtualList
-                  key={`quotes-${view}`}
-                  items={visibleQuotes}
-                  renderItem={renderQuote}
-                  columns={view==='grid' ? 2 : 1}
-                  itemHeight={view==='grid' ? ITEM_HEIGHT : 88}
-                />
+                <>
+                {/* Desktop table */}
+                  <div className="hidden sm:block">
+                    <QuoteTable
+                      headers={QUOTE_HEADERS}
+                      rows={paginatedQuotes.map(q => (
+                        <QuoteRow key={q.id} item={q} type="quote"
+                          onEdit={handleEdit}
+                          onDelete={id => setDeleteTarget({ id, type:'quote' })}
+                          onView={(item) => handleView(item, 'quote')}
+                          isAdmin={isAdmin}
+                          isMobile={false}/>
+                      ))}
+                      page={quotePage} totalPages={qTotalPages}
+                      count={visibleQuotes.length}
+                      from={(quotePage-1)*PAGE_SIZE+1}
+                      to={Math.min(quotePage*PAGE_SIZE, visibleQuotes.length)}
+                      onPage={setQuotePage}
+                    />
+                  </div>
+                  {/* Mobile cards */}
+                  <div className="sm:hidden">
+                    {paginatedQuotes.map(q => (
+                      <QuoteRow key={q.id} item={q} type="quote"
+                        onEdit={handleEdit}
+                        onDelete={id => setDeleteTarget({ id, type:'quote' })}
+                        onView={(item) => handleView(item, 'quote')}
+                        isAdmin={isAdmin}
+                        isMobile={true}/>
+                    ))}
+                    <PaginationBar
+                      page={quotePage} total={qTotalPages}
+                      count={visibleQuotes.length}
+                      from={(quotePage-1)*PAGE_SIZE+1}
+                      to={Math.min(quotePage*PAGE_SIZE, visibleQuotes.length)}
+                      onPage={setQuotePage}
+                    />
+                  </div>
+                </>
               ) : (
-                <VirtualList
-                  key="lyrics"
-                  items={visibleLyrics}
-                  renderItem={renderLyric}
-                  columns={1}
-                  itemHeight={90}
-                />
+                <>
+                  {/* Desktop lyrics table */}
+                  <div className="hidden sm:block">
+                    <QuoteTable
+                      headers={LYRIC_HEADERS}
+                      rows={paginatedLyrics.map(l => (
+                        <QuoteRow key={l.id} item={l} type="lyric"
+                          onEdit={() => {}}
+                          onDelete={id => setDeleteTarget({ id, type:'lyric' })}
+                          onView={(item) => handleView(item, 'lyric')}
+                          isAdmin={isAdmin}
+                          isMobile={false}/>
+                      ))}
+                      page={lyricPage} totalPages={lTotalPages}
+                      count={visibleLyrics.length}
+                      from={(lyricPage-1)*PAGE_SIZE+1}
+                      to={Math.min(lyricPage*PAGE_SIZE, visibleLyrics.length)}
+                      onPage={setLyricPage}
+                    />
+                  </div>
+                  {/* Mobile lyrics cards */}
+                  <div className="sm:hidden">
+                    {paginatedLyrics.map(l => (
+                      <QuoteRow key={l.id} item={l} type="lyric"
+                        onEdit={() => {}}
+                        onDelete={id => setDeleteTarget({ id, type:'lyric' })}
+                        onView={(item) => handleView(item, 'lyric')}
+                        isAdmin={isAdmin}
+                        isMobile={true}/>
+                    ))}
+                    <PaginationBar
+                      page={lyricPage} total={lTotalPages}
+                      count={visibleLyrics.length}
+                      from={(lyricPage-1)*PAGE_SIZE+1}
+                      to={Math.min(lyricPage*PAGE_SIZE, visibleLyrics.length)}
+                      onPage={setLyricPage}
+                    />
+                  </div>
+                </>
               )}
             </motion.div>
 

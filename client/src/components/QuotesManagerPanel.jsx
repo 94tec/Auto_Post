@@ -1,11 +1,11 @@
 // QuotesManagerPanel.jsx
-import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
+import { useState, useMemo, useEffect, useCallback, useRef, memo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   FiSearch, FiX, FiPlus, FiEdit2, FiTrash2, FiCheck, FiXCircle,
   FiUsers, FiFileText, FiMusic, FiCalendar, FiTrendingUp,
   FiRefreshCw, FiBookOpen, FiAlertCircle, FiChevronLeft,
-  FiChevronRight, FiCopy, FiChevronDown,
+  FiChevronRight, FiCopy, FiChevronDown, FiEye, FiStar,
 } from 'react-icons/fi';
 import toast from 'react-hot-toast';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -13,6 +13,7 @@ import { quotesApi, lyricsApi, adminApi } from '../utils/api';
 
 import QuoteModal    from '../pages/QuoteModal';
 import AddLyricModal from './AddLyricalModal';
+import { toMs } from '../utils/time';
 
 /* ── Design tokens ─────────────────────────────────────────── */
 const T = {
@@ -55,23 +56,24 @@ const DEFAULT_CATEGORIES = [
   'motivation','mindset','discipline','success','growth','resilience','inspiration',
 ];
 
-/* ── Timestamp helper (Firestore _seconds) ─────────────────── */
-const toMs = (ts) => {
-  if (!ts) return 0;
-  if (ts?.toDate)   return ts.toDate().getTime();
-  if (ts?._seconds) return ts._seconds * 1000;
-  if (ts?.seconds)  return ts.seconds * 1000;
-  const d = new Date(ts);
-  return isNaN(d) ? 0 : d.getTime();
-};
-
 const isToday = (ts) => {
   const d = new Date(toMs(ts)), n = new Date();
   return d.toDateString() === n.toDateString();
 };
 const isWeek = (ts) => (Date.now() - toMs(ts)) < 7 * 24 * 60 * 60 * 1000;
 
-/* ── Small shared components ───────────────────────────────── */
+const timeAgo = (ts) => {
+  const ms = toMs(ts);
+  if (!ms) return '?';
+  const m = Math.floor((Date.now() - ms) / 60000);
+  if (m < 1)  return 'just now';
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  return `${Math.floor(h / 24)}d ago`;
+};
+
+/* ── Shared styles ─────────────────────────────────────────── */
 const Label = ({ children, color }) => (
   <span style={{
     display:'block', fontSize:10, fontWeight:700,
@@ -87,6 +89,7 @@ const inputStyle = {
   outline:'none', transition:'border-color 0.2s',
 };
 
+/* ── Status badge ───────────────────────────────────────────── */
 const StatusBadge = ({ status }) => {
   const map = {
     approved: { color:T.green, label:'Approved' },
@@ -103,7 +106,7 @@ const StatusBadge = ({ status }) => {
   );
 };
 
-/* ── StatCard ───────────────────────────────────────────────── */
+/* ── Stat card ──────────────────────────────────────────────── */
 const StatCard = ({ label, value, color, icon: Icon, delay=0 }) => (
   <motion.div
     initial={{ opacity:0, y:8 }} animate={{ opacity:1, y:0 }}
@@ -182,7 +185,162 @@ const Pagination = ({ page, total, pageSize, onPage }) => {
   );
 };
 
-/* ── UserSelector ───────────────────────────────────────────── */
+/* ── View modal — defined at MODULE level, NOT inside QuoteRow ── */
+const ViewModal = memo(({ item, type, onClose, onEdit }) => {
+  if (!item) return null;
+  const isLyric = type === 'lyric';
+  const color   = cc(item.category ?? item.genre);
+  const label   = isLyric ? item.artist : item.author;
+  const cat     = item.category ?? item.genre;
+
+  const statusMap = {
+    approved: { color: T.green, label: 'Approved' },
+    pending:  { color: T.amber, label: 'Pending'  },
+    rejected: { color: T.red,   label: 'Rejected' },
+  };
+  const statusInfo = statusMap[item.status] ?? statusMap.pending;
+
+  return (
+    <motion.div
+      initial={{ opacity:0 }}
+      animate={{ opacity:1 }}
+      exit={{ opacity:0 }}
+      transition={{ duration:0.2 }}
+      style={{
+        position:'fixed', inset:0, zIndex:1000,
+        display:'flex', alignItems:'center', justifyContent:'center', padding:16,
+        background:'rgba(5,8,18,0.82)', backdropFilter:'blur(18px)',
+      }}
+      onClick={onClose}
+    >
+      <motion.div
+        initial={{ scale:0.88, opacity:0, y:24 }}
+        animate={{ scale:1, opacity:1, y:0 }}
+        exit={{ scale:0.88, opacity:0, y:24 }}
+        transition={{ type:'spring', stiffness:320, damping:28 }}
+        onClick={e => e.stopPropagation()}
+        style={{
+          position:'relative', width:'100%', maxWidth:480, overflow:'hidden',
+          background: `linear-gradient(145deg, ${color}0e 0%, #141924 45%)`,
+          border: `1px solid ${color}30`,
+          borderRadius: 24,
+          boxShadow: `0 40px 80px rgba(0,0,0,0.7), 0 0 0 1px ${color}12, inset 0 1px 0 ${color}18`,
+        }}
+      >
+        {/* Glow strip */}
+        <div style={{
+          position:'absolute', top:0, left:0, right:0, height:2, borderRadius:'24px 24px 0 0',
+          background:`linear-gradient(90deg, transparent, ${color}90, ${color}60, transparent)`,
+        }}/>
+
+        {/* Decorative quote mark */}
+        <div style={{
+          position:'absolute', top:16, right:24, fontSize:88, lineHeight:1,
+          fontFamily:'serif', pointerEvents:'none', userSelect:'none', color:`${color}08`,
+        }}>"</div>
+
+        {/* Header */}
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'20px 24px 16px', position:'relative', zIndex:10 }}>
+          <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+            <div style={{
+              width:32, height:32, borderRadius:10, display:'flex', alignItems:'center', justifyContent:'center',
+              background:`${color}18`, border:`1px solid ${color}25`,
+            }}>
+              {isLyric
+                ? <FiMusic size={13} style={{ color }}/>
+                : <FiBookOpen size={13} style={{ color }}/>
+              }
+            </div>
+            <div>
+              <p style={{ fontSize:10, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.16em', color:`${color}80`, margin:0 }}>
+                {isLyric ? 'Lyric' : 'Quote'}
+              </p>
+              {cat && <span style={{ fontSize:9, color:`${color}55`, textTransform:'capitalize' }}>{cat}</span>}
+            </div>
+          </div>
+          <button onClick={onClose} style={{
+            width:32, height:32, borderRadius:10, display:'flex', alignItems:'center', justifyContent:'center',
+            background:'rgba(255,255,255,0.05)', border:'1px solid rgba(255,255,255,0.08)',
+            color:'rgba(255,255,255,0.35)', cursor:'pointer', transition:'all 0.15s',
+          }}>
+            <FiX size={13}/>
+          </button>
+        </div>
+
+        {/* Body */}
+        <div style={{ padding:'0 24px 24px', position:'relative', zIndex:10 }}>
+          {/* Quote text */}
+          <p style={{
+            fontSize:18, color:'rgba(232,234,240,0.88)', lineHeight:1.65,
+            fontWeight:300, letterSpacing:'0.01em', fontFamily:'"Georgia", serif',
+            marginBottom:20,
+          }}>
+            {item.text}
+          </p>
+
+          {/* Author */}
+          <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:16 }}>
+            <div style={{ width:1, height:16, borderRadius:1, background:color }}/>
+            <p style={{ fontSize:13, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.12em', color, margin:0 }}>
+              {label}
+            </p>
+          </div>
+
+          {/* Tags */}
+          <div style={{ display:'flex', alignItems:'center', flexWrap:'wrap', gap:8, marginBottom:20 }}>
+            {cat && (
+              <span style={{ fontSize:10, padding:'4px 10px', borderRadius:20, fontWeight:600, textTransform:'capitalize', background:`${color}15`, color, border:`1px solid ${color}28` }}>
+                {cat}
+              </span>
+            )}
+            {!isLyric && item.status && (
+              <span style={{ fontSize:10, padding:'4px 10px', borderRadius:20, fontWeight:600, background:`${statusInfo.color}15`, color:statusInfo.color, border:`1px solid ${statusInfo.color}28` }}>
+                {statusInfo.label}
+              </span>
+            )}
+            {item.isFavorite && (
+              <span style={{ fontSize:10, padding:'4px 10px', borderRadius:20, fontWeight:600, display:'flex', alignItems:'center', gap:4, background:'rgba(129,140,248,0.12)', color:'#818CF8', border:'1px solid rgba(129,140,248,0.22)' }}>
+                <FiStar size={9}/> Favourite
+              </span>
+            )}
+            {item.createdAt && (
+              <span style={{ fontSize:10, color:T.t3, marginLeft:'auto' }}>{timeAgo(item.createdAt)}</span>
+            )}
+          </div>
+
+          {/* Divider */}
+          <div style={{ height:1, marginBottom:16, background:`linear-gradient(90deg, ${color}20, transparent)` }}/>
+
+          {/* Actions */}
+          <div style={{ display:'flex', gap:10 }}>
+            <button
+              onClick={() => { navigator.clipboard.writeText(`"${item.text}" — ${label}`); toast.success('Copied!'); }}
+              style={{ display:'flex', alignItems:'center', gap:6, padding:'8px 14px', borderRadius:12, fontSize:12, fontWeight:500, cursor:'pointer', background:'rgba(255,255,255,0.05)', border:'1px solid rgba(255,255,255,0.09)', color:'rgba(255,255,255,0.50)', transition:'all 0.15s' }}
+            >
+              <FiCopy size={11}/> Copy
+            </button>
+            {!isLyric && onEdit && (
+              <button
+                onClick={() => { onClose(); onEdit(item); }}
+                style={{ display:'flex', alignItems:'center', gap:6, padding:'8px 14px', borderRadius:12, fontSize:12, fontWeight:600, cursor:'pointer', background:`${T.indigo}15`, border:`1px solid ${T.indigo}28`, color:T.indigo, transition:'all 0.15s' }}
+              >
+                <FiEdit2 size={11}/> Edit
+              </button>
+            )}
+            <button
+              onClick={onClose}
+              style={{ marginLeft:'auto', display:'flex', alignItems:'center', gap:6, padding:'8px 16px', borderRadius:12, fontSize:12, fontWeight:700, cursor:'pointer', border:'none', color:'#111', background:`linear-gradient(to right,${T.amber},${T.amber2})`, transition:'all 0.15s' }}
+            >
+              Done
+            </button>
+          </div>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+});
+
+/* ── User selector ──────────────────────────────────────────── */
 const UserSelector = ({ users, selected, onSelect, forceClose }) => {
   const [open, setOpen] = useState(false);
   const [q, setQ]       = useState('');
@@ -193,7 +351,7 @@ const UserSelector = ({ users, selected, onSelect, forceClose }) => {
     document.addEventListener('mousedown', h);
     return () => document.removeEventListener('mousedown', h);
   }, []);
-    // close whenever a modal opens
+
   useEffect(() => {
     if (forceClose) setOpen(false);
   }, [forceClose]);
@@ -263,7 +421,7 @@ const UserSelector = ({ users, selected, onSelect, forceClose }) => {
             exit={{ opacity:0, y:-8 }} transition={{ duration:0.15 }}
             style={{
               position:'absolute', top:'calc(100% + 6px)', left:0, right:0,
-              zIndex: 300,
+              zIndex:300,
               background:T.surface3, border:`1px solid ${T.border2}`,
               borderRadius:14, overflow:'hidden', boxShadow:'0 16px 40px rgba(0,0,0,0.5)',
             }}
@@ -332,8 +490,8 @@ const UserSelector = ({ users, selected, onSelect, forceClose }) => {
   );
 };
 
-/* ── QuoteRow ───────────────────────────────────────────────── */
-const QuoteRow = ({ item, type, onEdit, onDelete, onApprove, onReject, isMobile }) => {
+/* ── Quote row ──────────────────────────────────────────────── */
+const QuoteRow = ({ item, type, onEdit, onDelete, onApprove, onReject, onView, isMobile }) => {
   const isLyric = type === 'lyric';
   const color   = cc(item.category ?? item.genre);
 
@@ -378,6 +536,9 @@ const QuoteRow = ({ item, type, onEdit, onDelete, onApprove, onReject, isMobile 
               </button>
             </>
           )}
+          <button onClick={() => onView(item)} style={{ flex:1, padding:'8px 0', borderRadius:10, border:`1px solid ${T.amber}40`, background:`${T.amber}12`, color:T.amber, fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:'inherit', display:'flex', alignItems:'center', justifyContent:'center', gap:5 }}>
+            <FiEye size={12}/> View
+          </button>
           <button onClick={() => onEdit(item)} style={{ flex:1, padding:'8px 0', borderRadius:10, border:`1px solid ${T.indigo}40`, background:`${T.indigo}12`, color:T.indigo, fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:'inherit', display:'flex', alignItems:'center', justifyContent:'center', gap:5 }}>
             <FiEdit2 size={12}/> Edit
           </button>
@@ -421,10 +582,22 @@ const QuoteRow = ({ item, type, onEdit, onDelete, onApprove, onReject, isMobile 
               </button>
             </>
           )}
-          <button onClick={() => onEdit(item)} title="Edit" style={{ width:28, height:28, borderRadius:8, border:`1px solid ${T.indigo}40`, background:`${T.indigo}12`, color:T.indigo, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}>
+          {/* View button */}
+          <button onClick={() => onView(item)} title="View"
+            style={{ width:28, height:28, borderRadius:8, border:`1px solid ${T.amber}35`, background:`${T.amber}10`, color:T.amber, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', transition:'all 0.15s' }}
+            onMouseEnter={e => e.currentTarget.style.background=`${T.amber}22`}
+            onMouseLeave={e => e.currentTarget.style.background=`${T.amber}10`}
+          >
+            <FiEye size={12}/>
+          </button>
+          {/* Edit button */}
+          <button onClick={() => onEdit(item)} title="Edit"
+            style={{ width:28, height:28, borderRadius:8, border:`1px solid ${T.indigo}40`, background:`${T.indigo}12`, color:T.indigo, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}>
             <FiEdit2 size={12}/>
           </button>
-          <button onClick={() => onDelete(item.id)} title="Delete" style={{ width:28, height:28, borderRadius:8, border:`1px solid ${T.red}30`, background:`${T.red}08`, color:T.red, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}>
+          {/* Delete button */}
+          <button onClick={() => onDelete(item.id)} title="Delete"
+            style={{ width:28, height:28, borderRadius:8, border:`1px solid ${T.red}30`, background:`${T.red}08`, color:T.red, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}>
             <FiTrash2 size={12}/>
           </button>
         </div>
@@ -444,16 +617,17 @@ export default function QuotesManagerPanel({
   const qc = useQueryClient();
 
   /* ── UI state ── */
-  const [selectedUser, setSelectedUser] = useState(null);
-  const [activeTab,    setActiveTab]    = useState('quotes');
-  const [search,       setSearch]       = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [catFilter,    setCatFilter]    = useState('all');
-  const [page,         setPage]         = useState(1);
-  const [isMobile,     setIsMobile]     = useState(false);
-  const [editingItem,  setEditingItem]  = useState(null);
+  const [selectedUser,   setSelectedUser]   = useState(null);
+  const [activeTab,      setActiveTab]      = useState('quotes');
+  const [search,         setSearch]         = useState('');
+  const [statusFilter,   setStatusFilter]   = useState('all');
+  const [catFilter,      setCatFilter]      = useState('all');
+  const [page,           setPage]           = useState(1);
+  const [isMobile,       setIsMobile]       = useState(false);
+  const [editingItem,    setEditingItem]    = useState(null);
   const [quoteModalOpen, setQuoteModalOpen] = useState(false);
   const [lyricModalOpen, setLyricModalOpen] = useState(false);
+  const [viewTarget,     setViewTarget]     = useState(null); // { item, type }
 
   /* ── responsive ── */
   useEffect(() => {
@@ -463,10 +637,8 @@ export default function QuotesManagerPanel({
     return () => window.removeEventListener('resize', check);
   }, []);
 
-  /* ── reset page on any filter change ── */
   useEffect(() => { setPage(1); }, [search, statusFilter, catFilter, selectedUser, activeTab]);
 
-  /* ── keyframes ── */
   useEffect(() => {
     if (document.getElementById('qmp-kf')) return;
     const s = document.createElement('style');
@@ -475,84 +647,58 @@ export default function QuotesManagerPanel({
     document.head.appendChild(s);
   }, []);
 
-  /* ════════════════════════════════════════════════════════════
-     DATA FETCHING
-  ════════════════════════════════════════════════════════════ */
-  const {
-    data: quotesData,
-    isLoading: quotesLoading,
-    isError: quotesErr,
-  } = useQuery({
+  /* ── Data fetching ── */
+  const { data: quotesData, isLoading: quotesLoading, isError: quotesErr } = useQuery({
     queryKey: ['admin-quotes'],
-    queryFn:  quotesApi.getAll,         // GET /api/quotes
+    queryFn:  quotesApi.getAll,
     select:   (res) => res?.quotes ?? res ?? [],
   });
 
-  const {
-    data: lyricsData,
-    isLoading: lyricsLoading,
-  } = useQuery({
+  const { data: lyricsData, isLoading: lyricsLoading } = useQuery({
     queryKey: ['admin-lyrics'],
-    queryFn:  lyricsApi.getAll,         // GET /api/lyrics
+    queryFn:  lyricsApi.getAll,
     select:   (res) => res?.lyrics ?? res ?? [],
   });
 
   const { data: usersData } = useQuery({
     queryKey: ['admin-users'],
-    queryFn:  adminApi.listUsers,       // GET /api/admin/users
+    queryFn:  adminApi.listUsers,
     select:   (res) => res?.users ?? res ?? [],
   });
 
-  // Safe arrays — never undefined downstream
-  const quotes = quotesData ?? [];
-  const lyrics = lyricsData ?? [];
-  const users  = usersData  ?? [];
+  const quotes  = quotesData ?? [];
+  const lyrics  = lyricsData ?? [];
+  const users   = usersData  ?? [];
   const loading = quotesLoading || lyricsLoading;
 
-  /* ════════════════════════════════════════════════════════════
-     MUTATIONS
-  ════════════════════════════════════════════════════════════ */
+  /* ── Mutations ── */
   const createQuoteMut = useMutation({
     mutationFn: (data) => quotesApi.create(data),
-    onSuccess:  () => {
-      qc.invalidateQueries({ queryKey: ['admin-quotes'] });
-      toast.success('Quote added!');
-    },
-    onError: (err) => toast.error(err.message || 'Failed to add quote'),
+    onSuccess:  () => { qc.invalidateQueries({ queryKey: ['admin-quotes'] }); toast.success('Quote added!'); },
+    onError:    (err) => toast.error(err.message || 'Failed to add quote'),
   });
 
   const updateQuoteMut = useMutation({
     mutationFn: ({ id, data }) => quotesApi.update(id, data),
-    onSuccess:  () => {
-      qc.invalidateQueries({ queryKey: ['admin-quotes'] });
-      toast.success('Quote updated!');
-    },
-    onError: (err) => toast.error(err.message || 'Failed to update'),
+    onSuccess:  () => { qc.invalidateQueries({ queryKey: ['admin-quotes'] }); toast.success('Quote updated!'); },
+    onError:    (err) => toast.error(err.message || 'Failed to update'),
   });
 
   const createLyricMut = useMutation({
     mutationFn: (data) => lyricsApi.create(data),
-    onSuccess:  () => {
-      qc.invalidateQueries({ queryKey: ['admin-lyrics'] });
-      toast.success('Lyric added!');
-    },
-    onError: (err) => toast.error(err.message || 'Failed to add lyric'),
+    onSuccess:  () => { qc.invalidateQueries({ queryKey: ['admin-lyrics'] }); toast.success('Lyric added!'); },
+    onError:    (err) => toast.error(err.message || 'Failed to add lyric'),
   });
 
-  // Unified update for lyrics (quotesApi.update reused — adjust if you have lyricsApi.update)
   const updateLyricMut = useMutation({
     mutationFn: ({ id, data }) => quotesApi.update(id, data),
-    onSuccess:  () => {
-      qc.invalidateQueries({ queryKey: ['admin-lyrics'] });
-      toast.success('Lyric updated!');
-    },
-    onError: (err) => toast.error(err.message || 'Failed to update lyric'),
+    onSuccess:  () => { qc.invalidateQueries({ queryKey: ['admin-lyrics'] }); toast.success('Lyric updated!'); },
+    onError:    (err) => toast.error(err.message || 'Failed to update lyric'),
   });
 
   const deleteMut = useMutation({
-    mutationFn: ({ id, type }) =>
-      type === 'lyric' ? lyricsApi.delete(id) : quotesApi.delete(id),
-    onSuccess: (_, { type }) => {
+    mutationFn: ({ id, type }) => type === 'lyric' ? lyricsApi.delete(id) : quotesApi.delete(id),
+    onSuccess:  (_, { type }) => {
       qc.invalidateQueries({ queryKey: [type === 'lyric' ? 'admin-lyrics' : 'admin-quotes'] });
       toast.success('Deleted');
     },
@@ -561,25 +707,17 @@ export default function QuotesManagerPanel({
 
   const approveMut = useMutation({
     mutationFn: (id) => quotesApi.update(id, { status: 'approved' }),
-    onSuccess:  () => {
-      qc.invalidateQueries({ queryKey: ['admin-quotes'] });
-      toast.success('Approved!');
-    },
-    onError: (err) => toast.error(err.message || 'Failed to approve'),
+    onSuccess:  () => { qc.invalidateQueries({ queryKey: ['admin-quotes'] }); toast.success('Approved!'); },
+    onError:    (err) => toast.error(err.message || 'Failed to approve'),
   });
 
   const rejectMut = useMutation({
     mutationFn: (id) => quotesApi.update(id, { status: 'rejected' }),
-    onSuccess:  () => {
-      qc.invalidateQueries({ queryKey: ['admin-quotes'] });
-      toast.error('Rejected');
-    },
-    onError: (err) => toast.error(err.message || 'Failed to reject'),
+    onSuccess:  () => { qc.invalidateQueries({ queryKey: ['admin-quotes'] }); },
+    onError:    (err) => toast.error(err.message || 'Failed to reject'),
   });
 
-  /* ════════════════════════════════════════════════════════════
-     DERIVED DATA
-  ════════════════════════════════════════════════════════════ */
+  /* ── Derived data ── */
   const isLyricTab = activeTab === 'lyrics';
   const rawItems   = isLyricTab ? lyrics : quotes;
 
@@ -626,9 +764,7 @@ export default function QuotesManagerPanel({
     return all;
   }, [quotes, lyrics, isLyricTab]);
 
-  /* ════════════════════════════════════════════════════════════
-     HANDLERS
-  ════════════════════════════════════════════════════════════ */
+  /* ── Handlers ── */
   const openAddQuote = () => { setEditingItem(null); setQuoteModalOpen(true); };
   const openAddLyric = () => { setEditingItem(null); setLyricModalOpen(true); };
 
@@ -638,27 +774,25 @@ export default function QuotesManagerPanel({
     else setQuoteModalOpen(true);
   };
 
+  const handleView = useCallback((item) => {
+    setViewTarget({ item, type: isLyricTab ? 'lyric' : 'quote' });
+  }, [isLyricTab]);
+
   const handleQuoteSave = async (data) => {
-    if (editingItem) {
-      await updateQuoteMut.mutateAsync({ id: editingItem.id, data });
-    } else {
-      await createQuoteMut.mutateAsync(data);
-    }
+    if (editingItem) await updateQuoteMut.mutateAsync({ id: editingItem.id, data });
+    else             await createQuoteMut.mutateAsync(data);
     setQuoteModalOpen(false);
     setEditingItem(null);
   };
 
   const handleLyricSave = async (data) => {
-    if (editingItem) {
-      await updateLyricMut.mutateAsync({ id: editingItem.id, data });
-    } else {
-      await createLyricMut.mutateAsync(data);
-    }
+    if (editingItem) await updateLyricMut.mutateAsync({ id: editingItem.id, data });
+    else             await createLyricMut.mutateAsync(data);
     setLyricModalOpen(false);
     setEditingItem(null);
   };
 
-  const handleDelete = useCallback(async (id) => {
+  const handleDelete  = useCallback(async (id) => {
     if (!window.confirm('Delete permanently?')) return;
     await deleteMut.mutateAsync({ id, type: isLyricTab ? 'lyric' : 'quote' });
   }, [deleteMut, isLyricTab]);
@@ -666,7 +800,6 @@ export default function QuotesManagerPanel({
   const handleApprove = useCallback((id) => approveMut.mutate(id), [approveMut]);
   const handleReject  = useCallback((id) => rejectMut.mutate(id),  [rejectMut]);
 
-  /* ── Tab button ── */
   const TabBtn = ({ id, label, icon: Icon, count }) => {
     const active = activeTab === id;
     return (
@@ -687,89 +820,78 @@ export default function QuotesManagerPanel({
     );
   };
 
-  /* ════════════════════════════════════════════════════════════
-     RENDER
-  ════════════════════════════════════════════════════════════ */
+  /* ── Render ── */
   return (
     <div style={{ fontFamily:"'DM Sans',system-ui,sans-serif", color:T.t1 }}>
 
-      {/* ── Header with two CTAs ── */}
+      {/* View modal — rendered at top level with AnimatePresence */}
+      <AnimatePresence>
+        {viewTarget && (
+          <ViewModal
+            item={viewTarget.item}
+            type={viewTarget.type}
+            onClose={() => setViewTarget(null)}
+            onEdit={(item) => {
+              setViewTarget(null);
+              openEdit(item);
+            }}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Header */}
       <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', flexWrap:'wrap', gap:12, marginBottom:20 }}>
         <div>
           <h2 style={{ fontSize:17, fontWeight:700, margin:0, letterSpacing:'-0.3px' }}>Content Manager</h2>
           <p style={{ fontSize:11, color:T.t3, margin:'3px 0 0' }}>Quotes &amp; lyrics — moderation and curation</p>
         </div>
         <div style={{ display:'flex', gap:8 }}>
-          <motion.button
-            whileHover={{ scale:1.03 }} whileTap={{ scale:0.97 }}
-            onClick={openAddQuote}
-            style={{
-              display:'flex', alignItems:'center', gap:7,
-              background:`linear-gradient(135deg,${T.amber},${T.amber2})`,
-              border:'none', borderRadius:20, padding:'9px 16px',
-              fontSize:12, fontWeight:700, color:'#111', cursor:'pointer', fontFamily:'inherit',
-            }}
-          >
+          <motion.button whileHover={{ scale:1.03 }} whileTap={{ scale:0.97 }} onClick={openAddQuote}
+            style={{ display:'flex', alignItems:'center', gap:7, background:`linear-gradient(135deg,${T.amber},${T.amber2})`, border:'none', borderRadius:20, padding:'9px 16px', fontSize:12, fontWeight:700, color:'#111', cursor:'pointer', fontFamily:'inherit' }}>
             <FiPlus size={12}/> Add Quote
           </motion.button>
-          <motion.button
-            whileHover={{ scale:1.03 }} whileTap={{ scale:0.97 }}
-            onClick={openAddLyric}
-            style={{
-              display:'flex', alignItems:'center', gap:7,
-              background:`linear-gradient(135deg,${T.purple},${T.indigo})`,
-              border:'none', borderRadius:20, padding:'9px 16px',
-              fontSize:12, fontWeight:700, color:'#fff', cursor:'pointer', fontFamily:'inherit',
-            }}
-          >
+          <motion.button whileHover={{ scale:1.03 }} whileTap={{ scale:0.97 }} onClick={openAddLyric}
+            style={{ display:'flex', alignItems:'center', gap:7, background:`linear-gradient(135deg,${T.purple},${T.indigo})`, border:'none', borderRadius:20, padding:'9px 16px', fontSize:12, fontWeight:700, color:'#fff', cursor:'pointer', fontFamily:'inherit' }}>
             <FiMusic size={12}/> Add Lyric
           </motion.button>
         </div>
       </div>
 
-      {/* ── User selector ── */}
+      {/* User selector */}
       <div style={{ marginBottom:16, position:'relative', zIndex:300 }}>
         <Label>Filter by user</Label>
-        <UserSelector users={users} selected={selectedUser} onSelect={setSelectedUser} forceClose={quoteModalOpen || lyricModalOpen} />
+        <UserSelector
+          users={users} selected={selectedUser} onSelect={setSelectedUser}
+          forceClose={quoteModalOpen || lyricModalOpen || !!viewTarget}
+        />
       </div>
 
-      {/* ── Stats ── */}
-      <div style={{
-        display:'grid',
-        gridTemplateColumns: isMobile ? 'repeat(2,1fr)' : 'repeat(3,1fr)',
-        gap:10, marginBottom:16,
-      }}>
-        <StatCard label="Total quotes"   value={stats.total}    color={T.indigo} icon={FiFileText}     delay={0}   />
-        <StatCard label="Approved"       value={stats.approved} color={T.green}  icon={FiCheck}        delay={0.05}/>
-        <StatCard label="Pending review" value={stats.pending}  color={T.amber}  icon={FiAlertCircle}  delay={0.1} />
-        <StatCard label="Posted today"   value={stats.today}    color={T.teal}   icon={FiCalendar}     delay={0.15}/>
-        <StatCard label="This week"      value={stats.week}     color={T.purple} icon={FiTrendingUp}   delay={0.2} />
-        <StatCard label="Lyrics"         value={stats.lyrics}   color={T.coral}  icon={FiMusic}        delay={0.25}/>
+      {/* Stats */}
+      <div style={{ display:'grid', gridTemplateColumns: isMobile ? 'repeat(2,1fr)' : 'repeat(3,1fr)', gap:10, marginBottom:16 }}>
+        <StatCard label="Total quotes"   value={stats.total}    color={T.indigo} icon={FiFileText}    delay={0}   />
+        <StatCard label="Approved"       value={stats.approved} color={T.green}  icon={FiCheck}       delay={0.05}/>
+        <StatCard label="Pending review" value={stats.pending}  color={T.amber}  icon={FiAlertCircle} delay={0.1} />
+        <StatCard label="Posted today"   value={stats.today}    color={T.teal}   icon={FiCalendar}    delay={0.15}/>
+        <StatCard label="This week"      value={stats.week}     color={T.purple} icon={FiTrendingUp}  delay={0.2} />
+        <StatCard label="Lyrics"         value={stats.lyrics}   color={T.coral}  icon={FiMusic}       delay={0.25}/>
       </div>
 
-      {/* ── Tab nav ── */}
-      <div style={{
-        display:'flex', gap:3, background:T.surface, border:`1px solid ${T.border}`,
-        borderRadius:12, padding:4, marginBottom:16, width:'fit-content',
-      }}>
+      {/* Tab nav */}
+      <div style={{ display:'flex', gap:3, background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, padding:4, marginBottom:16, width:'fit-content' }}>
         <TabBtn id="quotes" label="Quotes" icon={FiBookOpen} count={quotes.length}/>
         <TabBtn id="lyrics" label="Lyrics" icon={FiMusic}    count={lyrics.length}/>
       </div>
 
-      {/* ── Filters ── */}
+      {/* Filters */}
       <div style={{ display:'flex', flexWrap:'wrap', gap:8, marginBottom:14 }}>
         <div style={{ position:'relative', flex:'1 1 200px' }}>
           <FiSearch size={12} style={{ position:'absolute', left:12, top:'50%', transform:'translateY(-50%)', color:T.t3 }}/>
-          <input
-            value={search} onChange={e => setSearch(e.target.value)}
-            placeholder="Search text or author…"
-            style={{ ...inputStyle, paddingLeft:34, borderRadius:20 }}
-          />
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search text or author…"
+            style={{ ...inputStyle, paddingLeft:34, borderRadius:20 }}/>
           {search && (
-            <button onClick={() => setSearch('')} style={{
-              position:'absolute', right:10, top:'50%', transform:'translateY(-50%)',
-              background:'none', border:'none', cursor:'pointer', color:T.t3,
-            }}><FiX size={12}/></button>
+            <button onClick={() => setSearch('')} style={{ position:'absolute', right:10, top:'50%', transform:'translateY(-50%)', background:'none', border:'none', cursor:'pointer', color:T.t3 }}>
+              <FiX size={12}/>
+            </button>
           )}
         </div>
         {!isLyricTab && (
@@ -788,14 +910,14 @@ export default function QuotesManagerPanel({
         </select>
       </div>
 
-      {/* ── Result count ── */}
+      {/* Result count */}
       <div style={{ fontSize:11, color:T.t3, marginBottom:10 }}>
         {filtered.length} {isLyricTab ? 'lyrics' : 'quotes'}
         {selectedUser && ` by ${selectedUser.displayName || selectedUser.email}`}
         {search && ` matching "${search}"`}
       </div>
 
-      {/* ── Content ── */}
+      {/* Content */}
       {loading ? (
         <div style={{ display:'flex', alignItems:'center', justifyContent:'center', padding:48, color:T.t3, gap:10 }}>
           <FiRefreshCw size={16} style={{ animation:'spin 1s linear infinite' }}/> Loading…
@@ -813,10 +935,8 @@ export default function QuotesManagerPanel({
           <p style={{ fontSize:13, color:T.t2 }}>
             {search ? `No results for "${search}"` : `No ${isLyricTab ? 'lyrics' : 'quotes'} found`}
           </p>
-          <button
-            onClick={isLyricTab ? openAddLyric : openAddQuote}
-            style={{ marginTop:4, padding:'8px 18px', borderRadius:20, background:T.amber, border:'none', color:'#111', fontSize:12, fontWeight:700, cursor:'pointer', fontFamily:'inherit' }}
-          >
+          <button onClick={isLyricTab ? openAddLyric : openAddQuote}
+            style={{ marginTop:4, padding:'8px 18px', borderRadius:20, background:T.amber, border:'none', color:'#111', fontSize:12, fontWeight:700, cursor:'pointer', fontFamily:'inherit' }}>
             + Add {isLyricTab ? 'lyric' : 'quote'}
           </button>
         </div>
@@ -825,8 +945,11 @@ export default function QuotesManagerPanel({
           <AnimatePresence>
             {paginated.map(item => (
               <QuoteRow key={item.id} item={item} type={isLyricTab ? 'lyric' : 'quote'}
-                onEdit={openEdit} onDelete={handleDelete}
-                onApprove={handleApprove} onReject={handleReject}
+                onEdit={openEdit}
+                onDelete={handleDelete}
+                onApprove={handleApprove}
+                onReject={handleReject}
+                onView={handleView}      // ← passed here
                 isMobile={true}/>
             ))}
           </AnimatePresence>
@@ -848,8 +971,11 @@ export default function QuotesManagerPanel({
               <tbody>
                 {paginated.map(item => (
                   <QuoteRow key={item.id} item={item} type={isLyricTab ? 'lyric' : 'quote'}
-                    onEdit={openEdit} onDelete={handleDelete}
-                    onApprove={handleApprove} onReject={handleReject}
+                    onEdit={openEdit}
+                    onDelete={handleDelete}
+                    onApprove={handleApprove}
+                    onReject={handleReject}
+                    onView={handleView}      // ← passed here
                     isMobile={false}/>
                 ))}
               </tbody>
@@ -859,7 +985,7 @@ export default function QuotesManagerPanel({
         </div>
       )}
 
-      {/* ── Modals ── */}
+      {/* Modals */}
       <QuoteModal
         isOpen={quoteModalOpen}
         onClose={() => { setQuoteModalOpen(false); setEditingItem(null); }}
