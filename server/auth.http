@@ -20,7 +20,8 @@
 ### ═══════════════════════════════════════════════════════════════════
 
 # ── Base URLs ─────────────────────────────────────────────────────────
-@host      = https://auto-post-u9si.onrender.com
+# @host      = https://auto-post-u9si.onrender.com
+@host      = http://localhost:3000
 @authBase  = {{host}}/api/auth
 @adminBase = {{host}}/api/admin
 @userBase  = {{host}}/api/users

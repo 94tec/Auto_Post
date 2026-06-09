@@ -3,17 +3,23 @@ import { useState, useMemo, useEffect, useCallback, useRef, memo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   FiSearch, FiX, FiPlus, FiEdit2, FiTrash2, FiCheck, FiXCircle,
-  FiUsers, FiFileText, FiMusic, FiCalendar, FiTrendingUp,
-  FiRefreshCw, FiBookOpen, FiAlertCircle, FiChevronLeft,
-  FiChevronRight, FiCopy, FiChevronDown, FiEye, FiStar,
+  FiUsers, FiFileText, FiMusic, FiCalendar, FiTrendingUp,FiShare2,
+  FiRefreshCw, FiBookOpen, FiAlertCircle, FiChevronLeft,FiClock,
+  FiChevronRight, FiCopy, FiChevronDown, FiEye, FiStar, FiAlertTriangle,
 } from 'react-icons/fi';
+import QueueDashboard from '../pages/QueueDashboard';
 import toast from 'react-hot-toast';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { quotesApi, lyricsApi, adminApi } from '../utils/api';
 
 import QuoteModal    from '../pages/QuoteModal';
 import AddLyricModal from './AddLyricalModal';
+import PostToXButton from './PostToXButton';
+import QueueButton    from './QueueButton';
 import { toMs } from '../utils/time';
+
+import { useShowcaseShare  } from '../hooks/useShowcaseShare';
+//import { setCaptureRef } from '../utils/captureRefStore';
 
 /* ── Design tokens ─────────────────────────────────────────── */
 const T = {
@@ -339,6 +345,41 @@ const ViewModal = memo(({ item, type, onClose, onEdit }) => {
     </motion.div>
   );
 });
+/* ─── Delete modal ──────────────────────────────────────────── */
+const DeleteModal = memo(({ label = 'quote', onConfirm, onCancel }) => (
+  <motion.div
+    initial={{ opacity:0 }} animate={{ opacity:1 }} exit={{ opacity:0 }}
+    className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+    onClick={onCancel}
+  >
+    <motion.div
+      initial={{ scale:0.92, opacity:0 }} animate={{ scale:1, opacity:1 }}
+      exit={{ scale:0.92, opacity:0 }} transition={{ duration:0.18 }}
+      onClick={e=>e.stopPropagation()}
+      className="w-full max-w-sm bg-[#141924] border border-white/10 rounded-2xl p-6 shadow-[0_24px_48px_rgba(0,0,0,0.6)]"
+    >
+      <div className="flex items-center gap-3 mb-4">
+        <div className="w-9 h-9 rounded-xl bg-red-500/15 flex items-center justify-center">
+          <FiAlertTriangle size={16} className="text-red-400"/>
+        </div>
+        <div>
+          <h3 className="text-[14px] font-bold text-white">Delete {label}?</h3>
+          <p className="text-[12px] text-white/40">This cannot be undone.</p>
+        </div>
+      </div>
+      <div className="flex gap-2.5 mt-2">
+        <button onClick={onCancel}
+          className="flex-1 py-2.5 rounded-xl text-[13px] font-medium bg-white/6 hover:bg-white/10 text-white/60 border border-white/8 transition-all">
+          Cancel
+        </button>
+        <button onClick={onConfirm}
+          className="flex-1 py-2.5 rounded-xl text-[13px] font-semibold bg-red-500/20 hover:bg-red-500/30 text-red-400 border border-red-500/25 transition-all">
+          Delete
+        </button>
+      </div>
+    </motion.div>
+  </motion.div>
+));
 
 /* ── User selector ──────────────────────────────────────────── */
 const UserSelector = ({ users, selected, onSelect, forceClose }) => {
@@ -355,6 +396,19 @@ const UserSelector = ({ users, selected, onSelect, forceClose }) => {
   useEffect(() => {
     if (forceClose) setOpen(false);
   }, [forceClose]);
+  // inside the component body:
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('x_connected')) {
+      toast.success(`X account @${params.get('x_user')} connected!`);
+      // Clean URL
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+    if (params.get('x_error')) {
+      toast.error(`X connection failed: ${params.get('x_error')}`);
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  }, []);
 
   const filtered = useMemo(() =>
     users.filter(u =>
@@ -491,9 +545,10 @@ const UserSelector = ({ users, selected, onSelect, forceClose }) => {
 };
 
 /* ── Quote row ──────────────────────────────────────────────── */
-const QuoteRow = ({ item, type, onEdit, onDelete, onApprove, onReject, onView, isMobile }) => {
+const QuoteRow = ({ item, type, onEdit, onDelete, onApprove, onReject, onView, onShare, isMobile }) => {
   const isLyric = type === 'lyric';
   const color   = cc(item.category ?? item.genre);
+  //const rowRef  = useRef(null);
 
   const copy = () => {
     navigator.clipboard.writeText(`"${item.text}" — ${item.author ?? item.artist}`);
@@ -503,6 +558,7 @@ const QuoteRow = ({ item, type, onEdit, onDelete, onApprove, onReject, onView, i
   if (isMobile) {
     return (
       <motion.div
+        //ref={rowRef}   
         initial={{ opacity:0, y:6 }} animate={{ opacity:1, y:0 }}
         style={{
           background:T.surface2, border:`1px solid ${T.border}`,
@@ -545,6 +601,28 @@ const QuoteRow = ({ item, type, onEdit, onDelete, onApprove, onReject, onView, i
           <button onClick={() => onDelete(item.id)} style={{ flex:1, padding:'8px 0', borderRadius:10, border:`1px solid ${T.red}30`, background:`${T.red}08`, color:T.red, fontSize:12, fontWeight:500, cursor:'pointer', fontFamily:'inherit', display:'flex', alignItems:'center', justifyContent:'center', gap:5 }}>
             <FiTrash2 size={12}/> Delete
           </button>
+           <QueueButton item={item} sourceType={type} variant="mini" />
+          <button
+            //onClick={() => onShare?.(item)}
+            onClick={() => {
+              //setCaptureRef(rowRef);
+              onShare?.(item);
+            }}
+            title="Share"
+            style={{
+              width: 28, height: 28, borderRadius: 8,
+              border: '1px solid rgba(29,155,240,0.25)',
+              background: 'rgba(29,155,240,0.10)',
+              color: '#1D9BF0',
+              cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              transition: 'all 0.15s',
+            }}
+            onMouseEnter={e => e.currentTarget.style.background = 'rgba(29,155,240,0.20)'}
+            onMouseLeave={e => e.currentTarget.style.background = 'rgba(29,155,240,0.10)'}
+          >
+            <FiShare2 size={12}/>
+          </button>
         </div>
       </motion.div>
     );
@@ -552,6 +630,7 @@ const QuoteRow = ({ item, type, onEdit, onDelete, onApprove, onReject, onView, i
 
   return (
     <tr
+      //ref={rowRef}
       style={{ borderBottom:`1px solid ${T.border}`, transition:'background 0.1s' }}
       onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.02)'}
       onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
@@ -595,10 +674,31 @@ const QuoteRow = ({ item, type, onEdit, onDelete, onApprove, onReject, onView, i
             style={{ width:28, height:28, borderRadius:8, border:`1px solid ${T.indigo}40`, background:`${T.indigo}12`, color:T.indigo, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}>
             <FiEdit2 size={12}/>
           </button>
-          {/* Delete button */}
           <button onClick={() => onDelete(item.id)} title="Delete"
             style={{ width:28, height:28, borderRadius:8, border:`1px solid ${T.red}30`, background:`${T.red}08`, color:T.red, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}>
             <FiTrash2 size={12}/>
+          </button>
+          <QueueButton item={item} sourceType={type} variant="mini" />
+          <button
+            //onClick={() => onShare?.(item)}
+            onClick={() => {
+              //setCaptureRef(rowRef);
+              onShare?.(item);
+            }}
+            title="Share"
+            style={{
+              width: 28, height: 28, borderRadius: 8,
+              border: '1px solid rgba(29,155,240,0.25)',
+              background: 'rgba(29,155,240,0.10)',
+              color: '#1D9BF0',
+              cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              transition: 'all 0.15s',
+            }}
+            onMouseEnter={e => e.currentTarget.style.background = 'rgba(29,155,240,0.20)'}
+            onMouseLeave={e => e.currentTarget.style.background = 'rgba(29,155,240,0.10)'}
+          >
+            <FiShare2 size={12}/>
           </button>
         </div>
       </td>
@@ -628,6 +728,10 @@ export default function QuotesManagerPanel({
   const [quoteModalOpen, setQuoteModalOpen] = useState(false);
   const [lyricModalOpen, setLyricModalOpen] = useState(false);
   const [viewTarget,     setViewTarget]     = useState(null); // { item, type }
+  const [deleteTarget,   setDeleteTarget]   = useState(null); // { id, type }
+
+  const [queueOpen, setQueueOpen] = useState(false);
+  const { openCinematicShare } = useShowcaseShare();
 
   /* ── responsive ── */
   useEffect(() => {
@@ -696,13 +800,28 @@ export default function QuotesManagerPanel({
     onError:    (err) => toast.error(err.message || 'Failed to update lyric'),
   });
 
-  const deleteMut = useMutation({
-    mutationFn: ({ id, type }) => type === 'lyric' ? lyricsApi.delete(id) : quotesApi.delete(id),
-    onSuccess:  (_, { type }) => {
-      qc.invalidateQueries({ queryKey: [type === 'lyric' ? 'admin-lyrics' : 'admin-quotes'] });
-      toast.success('Deleted');
+  const deleteMutation = useMutation({
+    mutationFn: ({ id, type }) => type==='lyric' ? lyricsApi.delete(id) : quotesApi.delete(id),
+    onMutate: async ({ id, type }) => {
+      const key = type==='lyric' ? ['lyrics'] : ['quotes'];
+      await qc.cancelQueries({ queryKey:key });
+      const prev = qc.getQueryData(key);
+      qc.setQueryData(key, old => ({
+        ...old,
+        [type==='lyric'?'lyrics':'quotes']: (old?.[type==='lyric'?'lyrics':'quotes']??[]).filter(q=>q.id!==id),
+      }));
+      return { prev, key };
     },
-    onError: (err) => toast.error(err.message || 'Failed to delete'),
+    onSuccess: (_,{ type }) => {
+      qc.invalidateQueries({ queryKey: type==='lyric' ? ['lyrics'] : ['quotes'] });
+      toast.success(`${type==='lyric'?'Lyric':'Quote'} deleted`);
+      setDeleteTarget(null);
+    },
+    onError: (err, _, ctx) => {
+      qc.setQueryData(ctx.key, ctx.prev);
+      toast.error(err.message || 'Failed to delete');
+      setDeleteTarget(null);
+    },
   });
 
   const approveMut = useMutation({
@@ -768,11 +887,12 @@ export default function QuotesManagerPanel({
   const openAddQuote = () => { setEditingItem(null); setQuoteModalOpen(true); };
   const openAddLyric = () => { setEditingItem(null); setLyricModalOpen(true); };
 
-  const openEdit = (item) => {
+  /* ── Edit: opens form with quote details pre-filled ── */
+  const openEdit = useCallback((item) => {
     setEditingItem(item);
     if (isLyricTab) setLyricModalOpen(true);
     else setQuoteModalOpen(true);
-  };
+  }, [isLyricTab]);
 
   const handleView = useCallback((item) => {
     setViewTarget({ item, type: isLyricTab ? 'lyric' : 'quote' });
@@ -791,14 +911,26 @@ export default function QuotesManagerPanel({
     setLyricModalOpen(false);
     setEditingItem(null);
   };
-
-  const handleDelete  = useCallback(async (id) => {
-    if (!window.confirm('Delete permanently?')) return;
-    await deleteMut.mutateAsync({ id, type: isLyricTab ? 'lyric' : 'quote' });
-  }, [deleteMut, isLyricTab]);
+  const handleDelete = useCallback((id, type) => setDeleteTarget({ id, type }), []);
 
   const handleApprove = useCallback((id) => approveMut.mutate(id), [approveMut]);
   const handleReject  = useCallback((id) => rejectMut.mutate(id),  [rejectMut]);
+
+  const handleShare = useCallback((item) => {
+  openCinematicShare({
+    item: {
+      id:     item.id,
+      text:   item.text,
+      author: item.author ?? item.artist,
+    },
+    type:     isLyricTab ? 'lyric' : 'quote',
+    accent:   CAT_COLORS[item.category ?? item.genre] ?? '#818CF8',
+    showcase: {
+      title:  isLyricTab ? 'Lyric' : 'Quote',
+      share:  { hashtags: ['Damuchi', item.category ?? item.genre ?? 'quotes'] },
+    },
+  });
+}, [openCinematicShare, isLyricTab]);
 
   const TabBtn = ({ id, label, icon: Icon, count }) => {
     const active = activeTab === id;
@@ -823,6 +955,16 @@ export default function QuotesManagerPanel({
   /* ── Render ── */
   return (
     <div style={{ fontFamily:"'DM Sans',system-ui,sans-serif", color:T.t1 }}>
+      {/* ── Modals ── */}
+      <AnimatePresence>
+        {deleteTarget && (
+          <DeleteModal
+            label={deleteTarget.type}
+            onConfirm={() => deleteMutation.mutate(deleteTarget)}
+            onCancel={() => setDeleteTarget(null)}
+          />
+        )}
+      </AnimatePresence>     
 
       {/* View modal — rendered at top level with AnimatePresence */}
       <AnimatePresence>
@@ -846,6 +988,22 @@ export default function QuotesManagerPanel({
           <p style={{ fontSize:11, color:T.t3, margin:'3px 0 0' }}>Quotes &amp; lyrics — moderation and curation</p>
         </div>
         <div style={{ display:'flex', gap:8 }}>
+          <motion.button
+            whileHover={{ scale:1.03 }}
+            whileTap={{ scale:0.97 }}
+            onClick={() => setQueueOpen(true)}
+            style={{
+              display:'flex', alignItems:'center', gap:7,
+              background:'rgba(99,102,241,0.12)',
+              border:'1px solid rgba(99,102,241,0.25)',
+              borderRadius:20, padding:'9px 16px',
+              fontSize:12, fontWeight:700,
+              color:'#818CF8', cursor:'pointer', fontFamily:'inherit',
+              transition:'all .15s',
+            }}
+          >
+            <FiClock size={12}/> Queue Dashboard
+          </motion.button>
           <motion.button whileHover={{ scale:1.03 }} whileTap={{ scale:0.97 }} onClick={openAddQuote}
             style={{ display:'flex', alignItems:'center', gap:7, background:`linear-gradient(135deg,${T.amber},${T.amber2})`, border:'none', borderRadius:20, padding:'9px 16px', fontSize:12, fontWeight:700, color:'#111', cursor:'pointer', fontFamily:'inherit' }}>
             <FiPlus size={12}/> Add Quote
@@ -950,6 +1108,7 @@ export default function QuotesManagerPanel({
                 onApprove={handleApprove}
                 onReject={handleReject}
                 onView={handleView}      // ← passed here
+                onShare={handleShare}   
                 isMobile={true}/>
             ))}
           </AnimatePresence>
@@ -975,7 +1134,8 @@ export default function QuotesManagerPanel({
                     onDelete={handleDelete}
                     onApprove={handleApprove}
                     onReject={handleReject}
-                    onView={handleView}      // ← passed here
+                    onView={handleView}  
+                    onShare={handleShare}   
                     isMobile={false}/>
                 ))}
               </tbody>
@@ -1001,6 +1161,62 @@ export default function QuotesManagerPanel({
         onSuccess={() => qc.invalidateQueries({ queryKey: ['admin-lyrics'] })}
         initialData={editingItem}
       />
+      {/* Queue Dashboard slide-over */}
+      <AnimatePresence>
+        {queueOpen && (
+          <>
+            {/* Backdrop */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setQueueOpen(false)}
+              style={{
+                position: 'fixed', inset: 0, zIndex: 400,
+                background: 'rgba(5,8,18,0.75)',
+                backdropFilter: 'blur(12px)',
+              }}
+            />
+
+            {/* Slide-over panel */}
+            <motion.div
+              initial={{ x: '100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '100%' }}
+              transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+              style={{
+                position: 'fixed', top: 0, right: 0, bottom: 0,
+                width: '100%', maxWidth: 720,
+                zIndex: 410,
+                background: '#0A0E1A',
+                borderLeft: '1px solid rgba(255,255,255,0.08)',
+                overflowY: 'auto',
+                boxShadow: '-24px 0 80px rgba(0,0,0,0.5)',
+              }}
+            >
+              {/* Close button */}
+              <button
+                onClick={() => setQueueOpen(false)}
+                style={{
+                  position: 'sticky', top: 16,
+                  marginLeft: 'auto', marginRight: 16,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  width: 32, height: 32, borderRadius: 10,
+                  background: 'rgba(255,255,255,0.06)',
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  color: 'rgba(255,255,255,0.4)',
+                  cursor: 'pointer', zIndex: 10,
+                  float: 'right',
+                }}
+              >
+                <FiX size={14} />
+              </button>
+
+              <QueueDashboard />
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

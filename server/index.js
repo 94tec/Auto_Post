@@ -19,6 +19,8 @@ import { attachSession }             from './services/sessionService.js';
 import { connectRedis }              from './config/redis.js';
 import { startWorker, JOBS }         from './services/jobQueue.js';
 import { apiLimiter }                from './middlewares/rateLimiter.js';
+import queueRoutes from './routes/queue.routes.js';
+import { startCronScheduler } from './services/cronService.js';
 
 const app    = express();
 const server = http.createServer(app);   // ← create server FIRST
@@ -115,18 +117,22 @@ const bootstrap = async () => {
   await connectRedis();   // gracefully continues if Redis is down
   startJobWorkers();
 
+  await startCronScheduler();
+
   server.listen(PORT, () => {
     console.log(`
 ┌────────────────────────────────────────────┐
 │  🚀 Damuchi API Running                    │
 │                                            │
-│  Port:        ${String(PORT).padEnd(28)}│
-│  Environment: ${String(process.env.NODE_ENV ?? 'development').padEnd(28)}│
+│  Port:        ${String(PORT).padEnd(28)} │
+│  Environment: ${String(process.env.NODE_ENV ?? 'development').padEnd(28)} │
 │                                            │
 │  Auth    → /api/auth                       │
 │  Quotes  → /api/quotes                     │
 │  Users   → /api/users                      │
 │  Admin   → /api/admin                      │
+│  Admin   → /api/x                          │
+│  Admin   → /api/guest-quotes               │
 └────────────────────────────────────────────┘
     `);
   });

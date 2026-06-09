@@ -13,12 +13,19 @@ import { useQuery } from '@tanstack/react-query';
 import {
   FiChevronLeft, FiChevronRight, FiWifi, FiCamera,
   FiBookOpen, FiStar, FiSettings, FiCopy, FiShare2,
-  FiPlus, FiMail, FiMusic, FiSearch, FiZap,
+  FiPlus, FiMail, FiMusic, FiSearch, FiZap,FiSend
 } from 'react-icons/fi';
 import { toast } from 'react-hot-toast';
 import useRole from '../hooks/useRole';
 import { ROLES } from '../store/authSlice';
 import { lyricsApi } from '../utils/api.js';
+
+import PostToXButton from './PostToXButton';
+import { useXStatus } from '../hooks/useXStatus';
+
+import { useShowcaseShare } from '../hooks/useShowcaseShare';
+import { setCaptureRef } from '../utils/captureRefStore';
+import wallpaper from '../assets/wallpaper12.jpg'; 
 
 /* ── helpers ──────────────────────────────────────────────── */
 const getDaySuffix = (d) =>
@@ -109,12 +116,19 @@ const DailyCard = ({ onContactOpen, onAddLyric }) => {
   const intervalRef = useRef(null);
   const resumeRef   = useRef(null);
 
+  const {
+      connected
+    } = useXStatus();
+
   const { data, refetch } = useQuery({
     queryKey: ['lyrics'],
     queryFn: lyricsApi.getAll,
     staleTime: 5 * 60_000,
   });
   const lyrics = data?.lyrics?.length ? data.lyrics : FALLBACK_LYRICS;
+  const cardCaptureRef = useRef(null); // to prevent
+  //const { openShare } = useShowcaseShare();
+  const { openDailyCardShare } = useShowcaseShare();
 
   /* live clock */
   useEffect(() => {
@@ -158,11 +172,20 @@ const DailyCard = ({ onContactOpen, onAddLyric }) => {
     toast.success('Copied!');
   };
 
-  const handleShare = async () => {
-    const l = lyrics[idx];
-    try {
-      await navigator.share({ title: 'Damuchi', text: `"${l.text}" — ${l.artist}`, url: window.location.href });
-    } catch { handleCopy(); }
+  const handleShare = () => {
+    if (!lyric) return;
+
+    // No need for setCaptureRef() anymore — we pass ref directly
+
+    openDailyCardShare({
+      cardRef: cardCaptureRef,
+      item: {
+        id:     lyric.id,
+        text:   lyric.text,
+        author: lyric.artist || lyric.author,
+      },
+      accent: accent,
+    });
   };
 
   const lyric  = lyrics[Math.min(idx, lyrics.length - 1)];
@@ -176,45 +199,57 @@ const DailyCard = ({ onContactOpen, onAddLyric }) => {
   ];
 
   return (
-    // Main phone container with entry animation
     <motion.div
-      initial={{ opacity: 0, scale: 0.92, y: 20 }}
-      animate={{ opacity: 1, scale: 1, y: 0 }}
-      transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
-      className="relative select-none"
-      style={{ width: 300 }}
+      ref={cardCaptureRef}
+      className="relative select-none rounded-[44px] overflow-hidden border border-transparent"
+      style={{
+        width: 310,
+        height: 'fit-content',
+        background: 'transparent',
+      }}
     >
-      {/* glow behind phone */}
-      <div className="absolute inset-0 rounded-[44px] blur-[40px] opacity-20"
-           style={{ background: accent, transform: 'scale(0.85) translateY(8%)' }} />
+      {/* PHONE SHELL (gradient + wallpaper) */}
+      <div
+        data-capture-clean
+        className="relative w-full h-full overflow-hidden"
+        style={{
+          background: 'linear-gradient(165deg, rgba(20,30,46,0.85), rgba(10,14,26,0.9), rgba(13,21,32,0.85))',
+        }}
+      >
+        {/* Wallpaper layer – fills shell without stretching */}
+        <div
+          className="absolute inset-0 pointer-events-none"
+          style={{
+            backgroundImage: `url(${wallpaper})`,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+            backgroundRepeat: 'no-repeat',
+            opacity: 0.6,
+          }}
+        />
 
-      {/* phone shell */}
-      <div className="relative rounded-[44px] overflow-hidden border border-white/12 shadow-[0_32px_64px_rgba(0,0,0,0.7)]"
-           style={{ background: 'linear-gradient(165deg,#141E2E,#0A0E1A,#0D1520)' }}>
+        {/* Side buttons – hidden during capture */}
+        <div className="absolute -right-[2px] top-24 w-[4px] h-12 rounded-l-full bg-white/15" />
+        <div className="absolute -left-[2px] top-20 w-[4px] h-8 rounded-r-full bg-white/15" />
+        <div className="absolute -left-[2px] top-32 w-[4px] h-8 rounded-r-full bg-white/15" />
 
-        {/* side buttons */}
-        <div className="absolute -right-[2px] top-24 w-[3px] h-12 rounded-l-full bg-white/10" />
-        <div className="absolute -left-[2px] top-20 w-[3px] h-8 rounded-r-full bg-white/10" />
-        <div className="absolute -left-[2px] top-32 w-[3px] h-8 rounded-r-full bg-white/10" />
-
-        <div className="relative px-5 pt-4 pb-5 flex flex-col gap-3">
-
-          {/* status bar */}
-          <div className="flex items-center justify-between px-1">
+        {/* MAIN CONTENT */}
+        <div className="relative z-10 px-5 pt-4 pb-5 flex flex-col gap-3">
+          {/* Status bar */}
+          <div data-capture-clean className="flex items-center justify-between px-1">
             <span className="text-[10px] font-semibold text-white/60">{dateLabel.time}</span>
             <div className="w-20 h-5 rounded-full bg-black/60 flex items-center justify-center gap-2 border border-white/8 ml-4">
               <div className="w-1.5 h-1.5 rounded-full bg-white/30" />
               <div className="w-1 h-1 rounded-full bg-white/20" />
             </div>
             <div className="flex items-center gap-1.5">
-              {/*<Signal bars={0.5} />*/} 
               <FiWifi size={10} className="text-white/55" />
               <Battery pct={battery} />
             </div>
           </div>
 
-          {/* date */}
-          <div className="text-center py-1">
+          {/* Date */}
+          <div data-capture-clean className="text-center py-1">
             <p className="text-[10px] text-white/35 uppercase tracking-[0.18em]">{dateLabel.weekday}</p>
             <h2 className="text-[32px] font-black text-white leading-tight tracking-tight">
               {dateLabel.day}
@@ -222,29 +257,53 @@ const DailyCard = ({ onContactOpen, onAddLyric }) => {
             <p className="text-[11px] text-white/40 tracking-wide">{dateLabel.month}</p>
           </div>
 
-          {/* category glow accent */}
-          <div className="h-[1px] mx-2 rounded-full opacity-60"
-               style={{ background: `linear-gradient(to right, transparent, ${accent}, transparent)` }} />
+          {/* X connection indicator – hidden during capture */}
+          {connected && (
+            <motion.div
+              data-capture-hide
+              initial={{ opacity: 0, y: -4 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="absolute top-[52px] right-5 z-20"
+            >
+              <div
+                className="flex items-center gap-1 px-2 py-1 rounded-full backdrop-blur-md"
+                style={{
+                  background: 'rgba(29,155,240,0.10)',
+                  border: '1px solid rgba(29,155,240,0.18)',
+                }}
+              >
+                <div className="w-1.5 h-1.5 rounded-full bg-[#1D9BF0] animate-pulse" />
+                <svg width={9} height={9} viewBox="0 0 24 24" fill="#1D9BF0">
+                  <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.748l7.73-8.835L1.254 2.25H8.08l4.253 5.622zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+                </svg>
+              </div>
+            </motion.div>
+          )}
 
-          {/* ── LYRIC CARD ── */}
+          {/* Category glow accent */}
+          <div data-capture-clean className="h-[1px] mx-2 rounded-full opacity-60"
+              style={{ background: `linear-gradient(to right, transparent, ${accent}, transparent)` }} />
+
+          {/* LYRIC CARD */}
           <div className="relative rounded-[20px] overflow-hidden border border-white/8 p-4"
-               style={{
-                 background: `linear-gradient(135deg, rgba(255,255,255,0.04), rgba(255,255,255,0.01))`,
-                 boxShadow: `0 0 30px ${accent}18`,
-               }}>
-
-            {/* progress bar */}
+              style={{
+                background: `linear-gradient(135deg, rgba(255,255,255,0.04), rgba(255,255,255,0.01))`,
+                boxShadow: `0 0 30px ${accent}18`,
+              }}>
+            {/* Auto‑play progress bar */}
             {autoOn && (
-              <motion.div key={idx}
+              <motion.div
+                key={idx}
                 className="absolute top-0 left-0 h-[2px] rounded-full"
                 style={{ background: accent, opacity: 0.5 }}
                 initial={{ width: '0%' }}
                 animate={{ width: '100%' }}
-                transition={{ duration: AUTO_INTERVAL / 1000, ease: 'linear' }} />
+                transition={{ duration: AUTO_INTERVAL / 1000, ease: 'linear' }}
+              />
             )}
 
-            {/* genre pill */}
-            <div className="flex items-center justify-between mb-3">
+            {/* Genre pill */}
+            <div data-capture-clean className="flex items-center justify-between mb-3">
               <span className="text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-[0.1em]"
                     style={{ background: `${accent}20`, color: accent }}>
                 {cl(lyric?.genre || lyric?.category)}
@@ -252,77 +311,104 @@ const DailyCard = ({ onContactOpen, onAddLyric }) => {
               <span className="text-[9px] text-white/25 tabular-nums">{idx + 1}/{lyrics.length}</span>
             </div>
 
-            {/* lyric text */}
+            {/* Quote text with animation */}
             <AnimatePresence mode="wait">
-              <motion.div key={lyric?.id ?? idx}
+              <motion.div
+                key={lyric?.id ?? idx}
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -8 }}
-                transition={{ duration: 0.25 }}>
-
-                <div className="text-[26px] leading-none font-serif mb-1.5 select-none"
-                     style={{ color: `${accent}35` }}>&ldquo;</div>
-
-                <p className="text-[12px] font-medium leading-[1.7] text-white/85 mb-2.5">
+                transition={{ duration: 0.25 }}
+              >
+                <div data-capture-clean className="text-[26px] leading-none font-serif mb-1.5 select-none"
+                    style={{ color: `${accent}35` }}>&ldquo;</div>
+                <p data-capture-clean className="text-[12px] font-medium leading-[1.7] text-white/85 mb-2.5">
                   {lyric?.text}
                 </p>
-
-                <p className="text-[9px] font-bold uppercase tracking-[0.14em]"
-                   style={{ color: accent }}>
+                <p data-capture-clean className="text-[9px] font-bold uppercase tracking-[0.14em]"
+                  style={{ color: accent }}>
                   — {lyric?.artist || lyric?.author}
                 </p>
               </motion.div>
             </AnimatePresence>
 
-            {/* controls */}
-            <div className="flex items-center justify-between mt-3 pt-2.5 border-t border-white/6">
+            {/* Controls (prev/next, dot nav, copy/share) */}
+            <div data-capture-clean className="flex items-center justify-between mt-3 pt-2.5 border-t border-white/6">
               <div className="flex gap-1">
                 {[-1, 1].map((d, i) => (
-                  <motion.button key={i} whileTap={{ scale: 0.8 }} onClick={() => bump(d)}
-                    className="w-7 h-7 rounded-xl flex items-center justify-center border border-white/8 bg-white/5 hover:bg-white/10 text-white/40 hover:text-white/70 transition-all">
+                  <motion.button
+                    key={i}
+                    whileTap={{ scale: 0.8 }}
+                    onClick={() => bump(d)}
+                    className="w-7 h-7 rounded-xl flex items-center justify-center border border-white/8 bg-white/5 hover:bg-white/10 text-white/40 hover:text-white/70 transition-all"
+                  >
                     {d < 0 ? <FiChevronLeft size={12} /> : <FiChevronRight size={12} />}
                   </motion.button>
                 ))}
               </div>
-
-              {/* dot nav */}
               <div className="flex items-center gap-[4px]">
                 {lyrics.slice(0, Math.min(lyrics.length, 5)).map((_, i) => (
-                  <motion.button key={i} onClick={() => { setIdx(i); pauseWithResume(); }}
+                  <motion.button
+                    key={i}
+                    onClick={() => { setIdx(i); pauseWithResume(); }}
                     animate={i === idx ? { width: 12 } : { width: 4 }}
                     className="h-[4px] rounded-full transition-colors"
-                    style={{ background: i === idx ? accent : 'rgba(255,255,255,0.2)' }} />
+                    style={{ background: i === idx ? accent : 'rgba(255,255,255,0.2)' }}
+                  />
                 ))}
               </div>
-
               <div className="flex gap-1">
-                <motion.button whileTap={{ scale: 0.8 }} onClick={handleCopy}
-                  className="w-7 h-7 rounded-xl flex items-center justify-center border border-white/8 bg-white/5 hover:bg-white/10 text-white/40 hover:text-white/70 transition-all">
+                <motion.button
+                  whileTap={{ scale: 0.8 }}
+                  onClick={handleCopy}
+                  className="w-7 h-7 rounded-xl flex items-center justify-center border border-white/8 bg-white/5 hover:bg-white/10 text-white/40 hover:text-white/70 transition-all"
+                >
                   <FiCopy size={11} />
                 </motion.button>
-                <motion.button whileTap={{ scale: 0.8 }} onClick={handleShare}
-                  className="w-7 h-7 rounded-xl flex items-center justify-center border border-white/8 bg-white/5 hover:bg-white/10 text-white/40 hover:text-white/70 transition-all">
-                  <FiShare2 size={11} />
-                </motion.button>
+                {isAdmin && (
+                  <motion.button
+                    whileTap={{ scale: 0.8 }}
+                    whileHover={{ scale: 1.05 }}
+                    onClick={handleShare}
+                    className="group relative overflow-hidden w-7 h-7 rounded-xl flex items-center justify-center transition-all"
+                    style={{
+                      background: connected ? 'rgba(29,155,240,0.12)' : 'rgba(255,255,255,0.05)',
+                      border: connected ? '1px solid rgba(29,155,240,0.25)' : '1px solid rgba(255,255,255,0.08)',
+                      color: connected ? '#1D9BF0' : 'rgba(255,255,255,0.4)',
+                    }}
+                  >
+                    <div
+                      className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                      style={{
+                        background: connected
+                          ? 'radial-gradient(circle at center,rgba(29,155,240,0.2),transparent 70%)'
+                          : 'radial-gradient(circle at center,rgba(255,255,255,0.08),transparent 70%)',
+                      }}
+                    />
+                    <FiShare2 size={11} className="relative z-10" />
+                  </motion.button>
+                )}
               </div>
             </div>
           </div>
 
-          {/* ── CTA BUTTONS ── */}
-          <div className="flex gap-2 mt-1">
-            {/* Contact CTA — always visible */}
+          {/* ✅ PostToXButton – hidden during capture */}
+          <div data-capture-hide className="mt-3 flex justify-center">
+            <PostToXButton item={lyric} sourceType="lyric" variant="pill" />
+          </div>
+
+          {/* Contact & Add Lyric buttons – visible */}
+          <div data-capture-hide className="flex gap-2 mt-1">
             <motion.button
-              whileTap={{ scale: 0.92 }} whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.92 }}
               onClick={onContactOpen}
               className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-2xl text-[10px] font-semibold border border-white/10 bg-white/5 hover:bg-white/10 text-white/55 hover:text-white transition-all"
             >
               <FiMail size={11} />Contact
             </motion.button>
-
-            {/* Add Lyric — ADMIN ONLY */}
             {isAdmin && (
               <motion.button
-                whileTap={{ scale: 0.92 }} whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.92 }}
                 onClick={onAddLyric}
                 className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-2xl text-[10px] font-bold text-[#0A0E1A] transition-all"
                 style={{ background: `linear-gradient(to right, #F59E0B, #F97316)` }}
@@ -332,37 +418,46 @@ const DailyCard = ({ onContactOpen, onAddLyric }) => {
             )}
           </div>
 
-          {/* app grid */}
-          <div className="grid grid-cols-4 gap-1 mt-1">
+          {/* App grid */}
+          <div data-capture-hide className="grid grid-cols-4 gap-1 mt-1">
             {apps.map((app) => (
               <AppIcon key={app.label} {...app} />
             ))}
           </div>
 
-          {/* bottom bar */}
-          <div className="flex items-center justify-center gap-6 mt-1 px-2">
-            <motion.button whileTap={{ scale: 0.8 }} onClick={() => navigate('/quotes')}
-              className="w-8 h-8 rounded-xl flex items-center justify-center bg-white/5 hover:bg-white/10 border border-white/8 text-white/35 hover:text-white/65 transition-all">
+          {/* Bottom bar (camera, D logo, search) */}
+          <div data-capture-hide className="flex items-center justify-center gap-6 mt-1 px-2">
+            <motion.button
+              whileTap={{ scale: 0.8 }}
+              onClick={() => navigate('/quotes')}
+              className="w-8 h-8 rounded-xl flex items-center justify-center bg-white/5 hover:bg-white/10 border border-white/8 text-white/35 hover:text-white/65 transition-all"
+            >
               <FiCamera size={13} />
             </motion.button>
-            <motion.button whileTap={{ scale: 0.9 }} onClick={() => navigate('/')}
+            <motion.button
+              whileTap={{ scale: 0.9 }}
+              onClick={() => navigate('/')}
               className="w-12 h-12 rounded-[14px] flex items-center justify-center font-black text-[16px] shadow-lg"
-              style={{ background: `linear-gradient(135deg, #F59E0B, #F97316)`, color: '#0A0E1A' }}>
+              style={{ background: `linear-gradient(135deg, #F59E0B, #F97316)`, color: '#0A0E1A' }}
+            >
               D
             </motion.button>
-            <motion.button whileTap={{ scale: 0.8 }} onClick={() => navigate('/quotes')}
-              className="w-8 h-8 rounded-xl flex items-center justify-center bg-white/5 hover:bg-white/10 border border-white/8 text-white/35 hover:text-white/65 transition-all">
+            <motion.button
+              whileTap={{ scale: 0.8 }}
+              onClick={() => navigate('/quotes')}
+              className="w-8 h-8 rounded-xl flex items-center justify-center bg-white/5 hover:bg-white/10 border border-white/8 text-white/35 hover:text-white/65 transition-all"
+            >
               <FiSearch size={13} />
             </motion.button>
           </div>
 
-          {/* home indicator */}
-          <div className="flex justify-center mt-1">
+          {/* Home indicator */}
+          <div data-capture-clean className="flex justify-center mt-1">
             <div className="w-24 h-1 rounded-full bg-white/20" />
           </div>
-        </div>
-      </div>
-    </motion.div>
+        </div> {/* end main content */}
+      </div> {/* end phone shell */}
+    </motion.div> /* end capture container */
   );
 };
 

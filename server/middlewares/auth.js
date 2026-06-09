@@ -203,3 +203,31 @@ export const requirePermission = (key, { allowAdmin = true } = {}) =>
     }
     next();
   };
+// ─────────────────────────────────────────────────────────────────── */
+export const verifyTokenLight = async (req, res, next) => {
+  const h = req.headers.authorization || '';
+  const token = h.startsWith('Bearer ') ? h.slice(7) : null;
+
+  if (!token) {
+    return res.status(401).json({
+      error: 'Authentication required',
+      code: 'NO_TOKEN',
+      message: 'Please sign in to access this resource.',
+    });
+  }
+
+  try {
+    const decoded = await admin.auth().verifyIdToken(token);
+    req.user = { uid: decoded.uid };
+    req.uid  = decoded.uid;
+    next();
+  } catch (err) {
+    console.error('[verifyTokenLight]', err.code, err.message);
+    const expired = err.code === 'auth/id-token-expired';
+    return res.status(401).json({
+      error:   expired ? 'Token expired'   : 'Invalid token',
+      code:    expired ? 'TOKEN_EXPIRED'   : 'INVALID_TOKEN',
+      message: expired ? 'Session expired. Please sign in again.' : 'Authentication failed.',
+    });
+  }
+};

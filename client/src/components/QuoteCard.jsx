@@ -1,9 +1,11 @@
 // QuoteCard.jsx — refactored to match Landing design system
 import { motion, AnimatePresence } from 'framer-motion';
-import { FiEdit2, FiTrash2, FiCopy, FiShare2, FiMoreVertical, FiStar } from 'react-icons/fi';
+import { FiEdit2, FiTrash2, FiCopy, FiShare2, FiMoreVertical, FiStar, FiSend } from 'react-icons/fi';
 import { useState, useRef, useEffect } from 'react';
 import { toast } from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
+
+import PostToXButton from './PostToXButton';
 
 
 const ACCENT_GRADIENT = 'from-[#F59E0B] to-[#F97316]';
@@ -218,6 +220,7 @@ const QuoteCard = ({ quote, onEdit, onDelete, onFavorite, index = 0 }) => {
                 <Icon size={13} />
               </motion.button>
             ))}
+            <PostToXButton item={quote} sourceType="quote" size={26}/>
           </div>
         </div>
       </div>

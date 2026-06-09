@@ -144,6 +144,7 @@ function AppRoutes() {
       <Route path="/quoteForm"    element={page(QuoteForm)}     />
       <Route path="/quoteList"    element={page(QuoteList)}     />
 
+
       {/* ── protected: verified + approved user or admin ───── */}
       <Route
         path="/dashboard"

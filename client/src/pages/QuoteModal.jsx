@@ -26,7 +26,7 @@ const panelV = {
 
 /* ────────────────────────────────────────────────────────────── */
 
-const QuoteModal = ({ isOpen, onClose, onSubmit }) => {
+const QuoteModal = ({ isOpen, onClose, onSubmit, initialData }) => {
 
   /* close on Escape */
   const handleKey = useCallback((e) => {
@@ -92,7 +92,7 @@ const QuoteModal = ({ isOpen, onClose, onSubmit }) => {
             {/* QuoteForm — mb-6 removed since modal handles spacing */}
             <QuoteForm
               onSubmit={handleSubmit}
-              editingQuote={null}
+              editingQuote={initialData ?? null}
               onCancel={onClose}
             />
           </motion.div>

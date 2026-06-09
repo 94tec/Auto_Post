@@ -7,6 +7,14 @@ import {
   FiShare2, FiCopy, FiChevronLeft, FiChevronRight,
 } from 'react-icons/fi';
 import { toast } from 'react-hot-toast';
+import UseRole from '../hooks/useRole';
+import PostToXButton from './PostToXButton';
+import { useShowcaseShare } from '../hooks/useShowcaseShare'
+
+import { useXStatus } from '../hooks/useXStatus';
+
+import { setCaptureRef } from '../utils/captureRefStore';
+  // Add these imports at the top:
 
 /* ── constants ──────────────────────────────────────────────── */
 const CAT_META = {
@@ -43,8 +51,13 @@ const QuoteFeature = ({
   const [internalAuto, setInternal] = useState(true);
   const intervalRef = useRef(null);
   const resumeRef   = useRef(null);
+  const cardCaptureRef = useRef(null); // to prevent
+  //const { openShare } = useShowcaseShare();
+  const { openCinematicShare } = useShowcaseShare();
 
+  const { isAdmin } = UseRole();
   const isAuto = externalAutoPlay !== undefined ? externalAutoPlay : internalAuto;
+  const { connected } = useXStatus();
 
   /* reset index when quotes load in for the first time */
   useEffect(() => {
@@ -99,16 +112,21 @@ const QuoteFeature = ({
     toast.success('Copied to clipboard');
   };
 
-  const handleShare = async () => {
-    const q = allQuotes[index];
-    if (!q?.text) return;
-    try {
-      await navigator.share({
-        title: 'Quote',
-        text:  `"${q.text}"${q.author ? ` — ${q.author}` : ''}`,
-        url:   window.location.href,
-      });
-    } catch { handleCopy(); }
+  // ── opens CinematicShareModal via ShowcaseShareProvider ──
+  const handleShare = () => {
+    if (isPlaceholder) return;
+    setCaptureRef(cardCaptureRef);
+    console.log('captureRef node:', cardCaptureRef.current); // ← verify before removing
+    openCinematicShare({ 
+      showcase: {
+        id:    'quote-feature',
+        title: 'QuoteFeature',
+        accent: accentColor,
+        share: { hashtags: ['Damuchi', quote?.category ?? 'Quotes', 'MotionUI'] },
+      },
+      item: quote,
+      type: 'quote',
+    });
   };
 
   const handleRandom = () => {
@@ -129,6 +147,7 @@ const QuoteFeature = ({
   return (
     <div className={`w-full max-w-[520px] mx-auto ${className}`}>
       <motion.div
+        ref={cardCaptureRef}
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.3, ease: 'easeOut' }}
@@ -142,6 +161,7 @@ const QuoteFeature = ({
         <AnimatePresence>
           {isAuto && !isPlaceholder && (
             <motion.div
+              data-capture-hide
               key={`prog-${index}`}
               className="absolute top-0 left-0 h-[2px]"
               style={{ background: accentColor, opacity: 0.35 }}
@@ -155,7 +175,7 @@ const QuoteFeature = ({
         <div className="p-5">
 
           {/* top row */}
-          <div className="flex items-center justify-between mb-5">
+          <div data-capture-clean className="flex items-center justify-between mb-5">
             {catMeta && !isPlaceholder ? (
               <span className="text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-[0.1em]"
                     style={{ background: `${accentColor}18`, color: accentColor }}>
@@ -168,7 +188,7 @@ const QuoteFeature = ({
           </div>
 
           {/* quote body */}
-          <div className="min-h-[96px] flex items-start">
+          <div data-capture-clean className="min-h-[96px] flex items-start">
             <AnimatePresence mode="wait">
               <motion.div
                 key={quote?.id ?? index}
@@ -196,67 +216,155 @@ const QuoteFeature = ({
           </div>
 
           {/* divider */}
-          <div className="mt-5 mb-4 h-px bg-white/6" />
+          <div data-capture-clean  className="mt-5 mb-4 h-px bg-white/6" />
 
           {/* controls */}
-          <div className="flex items-center justify-between gap-2">
+          <div data-capture-clean className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
 
-            {/* prev / play-pause / next */}
-            <div className="flex items-center gap-1.5">
-              <motion.button whileTap={{ scale: 0.88 }} onClick={() => bump(-1)}
-                disabled={isPlaceholder} aria-label="Previous" className={iconBtn}>
-                <FiChevronLeft size={14} />
-              </motion.button>
+            {/* left controls */}
+            <div data-capture-clean className="flex items-center gap-2">
 
-              <motion.button whileTap={{ scale: 0.88 }} onClick={toggleAuto}
-                disabled={isPlaceholder}
-                aria-label={isAuto ? 'Pause' : 'Resume'}
-                className="w-8 h-8 rounded-xl flex items-center justify-center border transition-all duration-150 disabled:opacity-30"
-                style={isAuto
-                  ? { background: `${accentColor}18`, borderColor: `${accentColor}40`, color: accentColor }
-                  : { background: 'rgba(255,255,255,0.05)', borderColor: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.4)' }
-                }>
-                {isAuto ? <FiPause size={12} /> : <FiPlay size={12} />}
-              </motion.button>
-
-              <motion.button whileTap={{ scale: 0.88 }} onClick={() => bump(1)}
-                disabled={isPlaceholder} aria-label="Next" className={iconBtn}>
-                <FiChevronRight size={14} />
-              </motion.button>
-            </div>
-
-            {/* dot indicators */}
-            <div className="flex items-center gap-[5px]">
-              {!isPlaceholder && allQuotes.slice(0, Math.min(allQuotes.length, MAX_DOTS)).map((_, i) => (
-                <button key={i} onClick={() => jumpTo(i)} aria-label={`Quote ${i + 1}`}
-                  className="transition-all duration-200 rounded-full"
-                  style={i === index
-                    ? { width: 16, height: 5, background: accentColor }
-                    : { width: 5, height: 5, background: 'rgba(255,255,255,0.18)' }
-                  } />
-              ))}
-              {!isPlaceholder && allQuotes.length > MAX_DOTS && (
-                <span className="text-[10px] text-white/20 ml-0.5">+{allQuotes.length - MAX_DOTS}</span>
-              )}
-              {isPlaceholder && (
-                <span className="text-[10px] text-white/15">loading…</span>
-              )}
-            </div>
-
-            {/* action buttons */}
-            <div className="flex items-center gap-1.5">
-              {[
-                { icon: FiCopy,      label: 'Copy',   action: handleCopy   },
-                { icon: FiShare2,    label: 'Share',  action: handleShare  },
-                { icon: FiRefreshCw, label: 'Random', action: handleRandom },
-              ].map(({ icon: Icon, label, action }) => (
-                <motion.button key={label} whileTap={{ scale: 0.88 }}
-                  onClick={action} disabled={isPlaceholder}
-                  aria-label={label} className={iconBtn}>
-                  <Icon size={13} />
+              {/* prev / play / next */}
+              <div data-capture-clean className="flex items-center gap-1.5">
+                <motion.button
+                  whileTap={{ scale: 0.88 }}
+                  onClick={() => bump(-1)}
+                  disabled={isPlaceholder}
+                  aria-label="Previous"
+                  className={iconBtn}
+                >
+                  <FiChevronLeft size={14} />
                 </motion.button>
-              ))}
+
+                <motion.button
+                  whileTap={{ scale: 0.88 }}
+                  onClick={toggleAuto}
+                  disabled={isPlaceholder}
+                  aria-label={isAuto ? 'Pause' : 'Resume'}
+                  className="w-8 h-8 rounded-xl flex items-center justify-center border transition-all duration-150 disabled:opacity-30"
+                  style={
+                    isAuto
+                      ? {
+                          background: `${accentColor}18`,
+                          borderColor: `${accentColor}40`,
+                          color: accentColor,
+                        }
+                      : {
+                          background: 'rgba(255,255,255,0.05)',
+                          borderColor: 'rgba(255,255,255,0.08)',
+                          color: 'rgba(255,255,255,0.4)',
+                        }
+                  }
+                >
+                  {isAuto ? <FiPause size={12} /> : <FiPlay size={12} />}
+                </motion.button>
+
+                <motion.button
+                  whileTap={{ scale: 0.88 }}
+                  onClick={() => bump(1)}
+                  disabled={isPlaceholder}
+                  aria-label="Next"
+                  className={iconBtn}
+                >
+                  <FiChevronRight size={14} />
+                </motion.button>
+              </div>
+
+              {/* dots */}
+              <div data-capture-clean className="flex items-center gap-[5px] ml-2">
+                {!isPlaceholder &&
+                  allQuotes
+                    .slice(0, Math.min(allQuotes.length, MAX_DOTS))
+                    .map((_, i) => (
+                      <button
+                        key={i}
+                        onClick={() => jumpTo(i)}
+                        aria-label={`Quote ${i + 1}`}
+                        className="transition-all duration-200 rounded-full"
+                        style={
+                          i === index
+                            ? {
+                                width: 16,
+                                height: 5,
+                                background: accentColor,
+                              }
+                            : {
+                                width: 5,
+                                height: 5,
+                                background: 'rgba(255,255,255,0.18)',
+                              }
+                        }
+                      />
+                    ))}
+              </div>
             </div>
+            {/* right actions */}
+            <div data-capture-hide className="flex items-center gap-1.5 self-end sm:self-auto">
+
+              {/* Copy */}
+              <motion.button
+                whileTap={{ scale: 0.88 }}
+                onClick={handleCopy}
+                disabled={isPlaceholder}
+                aria-label="Copy"
+                className={iconBtn}
+              >
+                <FiCopy size={13} />
+              </motion.button>
+              {isAdmin && (
+                <motion.button
+                  whileTap={{ scale: 0.88 }}
+                  whileHover={{ scale: 1.05 }}
+                  onClick={handleShare}
+                  disabled={isPlaceholder}
+                  aria-label="Share"
+                  className="group relative overflow-hidden w-8 h-8 rounded-xl flex items-center justify-center transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+                  style={{
+                    background: connected
+                      ? 'rgba(29,155,240,0.12)'
+                      : 'rgba(255,255,255,0.05)',
+                    border: connected
+                      ? '1px solid rgba(29,155,240,0.25)'
+                      : '1px solid rgba(255,255,255,0.08)',
+                    color: connected
+                      ? '#1D9BF0'
+                      : 'rgba(255,255,255,0.4)',
+                  }}
+                >
+                  {/* Glow on hover */}
+                  <div
+                    className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                    style={{
+                      background: connected
+                        ? 'radial-gradient(circle at center,rgba(29,155,240,0.2),transparent 70%)'
+                        : 'radial-gradient(circle at center,rgba(255,255,255,0.08),transparent 70%)',
+                    }}
+                  />
+                  <FiShare2 size={13} className="relative z-10" />
+                </motion.button>
+              )}
+            
+              {/* Random */}
+              <motion.button
+                whileTap={{ scale: 0.88 }}
+                onClick={handleRandom}
+                disabled={isPlaceholder}
+                aria-label="Random"
+                className={iconBtn}
+              >
+                <FiRefreshCw size={13} />
+              </motion.button>
+
+              {!isPlaceholder && (
+                <PostToXButton
+                  item={quote}
+                  sourceType="quote"
+                  variant="compact"
+                />
+              )}
+
+            </div>
+            
           </div>
         </div>
       </motion.div>

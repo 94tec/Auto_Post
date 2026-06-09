@@ -804,9 +804,11 @@ const QuoteRow = ({ item, type, onEdit, onDelete, onApprove, onReject, onView, i
               <FiEdit2 size={12}/> Edit
             </button>
           )}
-          <button onClick={() => onDelete(item.id)} style={{ flex:1, padding:'8px 0', borderRadius:10, border:`1px solid ${T.red}30`, background:`${T.red}08`, color:T.red, fontSize:12, fontWeight:500, cursor:'pointer', fontFamily:'inherit', display:'flex', alignItems:'center', justifyContent:'center', gap:5 }}>
-            <FiTrash2 size={12}/> Delete
-          </button>
+          {!isLyric && (
+            <button onClick={() => onDelete(item.id)} style={{ flex:1, padding:'8px 0', borderRadius:10, border:`1px solid ${T.red}30`, background:`${T.red}08`, color:T.red, fontSize:12, fontWeight:500, cursor:'pointer', fontFamily:'inherit', display:'flex', alignItems:'center', justifyContent:'center', gap:5 }}>
+              <FiTrash2 size={12}/> Delete
+            </button>
+          )}
         </div>
       </motion.div>
     );
@@ -957,6 +959,7 @@ const Dashboard = () => {
   const [showForm,         setShowForm]         = useState(false);
   const [view,             setView]             = useState('grid');
   const [activeTab,        setActiveTab]        = useState('quotes');
+  const [formData,        setFormData]        = useState({ text:'', author:'', category:'', genre:'' });
   const [deleteTarget,     setDeleteTarget]     = useState(null);
   const [viewTarget,       setViewTarget]       = useState(null); // { item, type }
   const [sidebarOpen,      setSidebarOpen]      = useState(false);
@@ -1090,15 +1093,30 @@ const Dashboard = () => {
   }, [qc]);
 
   const handleAddOrUpdate = useCallback((formData) => {
+    if (!formData.text.trim()) {
+      toast.error('Text is required');
+      return;
+    }
     if (editing) updateMutation.mutate({ id:editing.id, data:formData });
     else         createMutation.mutate(formData);
   }, [editing, createMutation, updateMutation]);
 
   /* ── Edit: opens form with quote details pre-filled ── */
-  const handleEdit = useCallback((q) => {
-    setEditing(q);
+  const handleEdit = useCallback((quote) => {
+    setEditing(quote);
+    setFormData({
+      text: quote.text ?? '',
+      author: quote.author ?? '',
+      category: quote.category ?? ''
+    });
     setShowForm(true);
+    // Smooth scroll after render
     setTimeout(() => formRef.current?.scrollIntoView({ behavior:'smooth', block:'start' }), 80);
+  }, []);
+  const handleCloseForm = useCallback(() => {
+    setShowForm(false);
+    setEditing(null);
+    setFormData({ text: '', author: '', category: '', genre: '' }); // Reset form too
   }, []);
 
   /* ── View: opens view modal ── */
