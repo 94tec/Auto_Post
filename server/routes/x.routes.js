@@ -94,32 +94,62 @@ const getValidAccessToken = async (uid) => {
 
 /* ─── Routes ─────────────────────────────────────────────────── */
 
-router.get('/connect', requireAuth, requireAdmin, async (req, res) => {
-  try {
-    const uid          = req.user.uid;
-    const state        = crypto.randomBytes(16).toString('hex');
-    const codeVerifier = generateCodeVerifier();
-    const challenge    = generateCodeChallenge(codeVerifier);
-    await adminFirestore.collection('xOAuthState').doc(uid).set({
-      state, codeVerifier,
-      createdAt: Date.now(),
-      expiresAt: Date.now() + 10 * 60 * 1000,
-    });
-    const params = new URLSearchParams({
-      response_type:         'code',
-      client_id:             X_CLIENT_ID,
-      redirect_uri:          X_REDIRECT_URI,
-      scope:                 SCOPES,
-      state:                 `${uid}:${state}`,
-      code_challenge:        challenge,
-      code_challenge_method: 'S256',
-    });
-    res.redirect(`${X_AUTH_URL}?${params}`);
-  } catch (err) {
-    console.error('[X connect]', err);
-    res.redirect(`${FRONTEND_URL}/dashboard?x_error=connect_failed`);
+router.get(
+  '/connect',
+  requireAuth,
+  requireAdmin,
+  async (req, res) => {
+    // ← capture origin before try so catch can use it
+    const origin = req.headers.origin ||
+      req.headers.referer?.replace(/\/$/, '') ||
+      process.env.CLIENT_URL;
+
+    // Whitelist — prevent open redirect
+    const ALLOWED = [
+      'http://localhost:5173',
+      'http://localhost:3000',
+      process.env.CLIENT_URL,
+    ].filter(Boolean);
+    const safeOrigin = ALLOWED.includes(origin) ? origin : process.env.CLIENT_URL;
+
+    try {
+      const uid = req.user.uid;
+
+      const state        = crypto.randomBytes(16).toString('hex');
+      const codeVerifier = generateCodeVerifier();
+      const codeChallenge = generateCodeChallenge(codeVerifier);
+
+      await adminFirestore.collection('xOAuthState').doc(uid).set({
+        state,
+        origin:    safeOrigin,   // ← use safeOrigin
+        codeVerifier,
+        createdAt: Date.now(),
+        expiresAt: Date.now() + 10 * 60 * 1000,
+      });
+
+      const encodedState = Buffer.from(
+        JSON.stringify({ uid, state })
+      ).toString('base64url');
+
+      const params = new URLSearchParams({
+        response_type:         'code',
+        client_id:             process.env.X_CLIENT_ID,
+        redirect_uri:          process.env.X_CALLBACK_URL,
+        scope:                 process.env.X_SCOPES,
+        state:                 encodedState,
+        code_challenge:        codeChallenge,
+        code_challenge_method: 'S256',
+      });
+
+      res.redirect(`https://twitter.com/i/oauth2/authorize?${params}`);
+
+    } catch (err) {
+      console.error('[X connect]', err);
+      // ← was CLIENT_URL, now uses safeOrigin
+      res.redirect(`${safeOrigin}/dashboard?x_error=connect_failed`);
+    }
   }
-});
+);
 
 router.get('/connect-url', requireAuth, requireAdmin, async (req, res) => {
   try {
@@ -149,57 +179,90 @@ router.get('/connect-url', requireAuth, requireAdmin, async (req, res) => {
 });
 
 router.get('/callback', async (req, res) => {
-  const { code, state: rawState, error } = req.query;
-  if (error) return res.redirect(`${FRONTEND_URL}/dashboard?x_error=${encodeURIComponent(error)}`);
   try {
-    const [uid, returnedState] = rawState.split(':');
-    const stateSnap = await adminFirestore.collection('xOAuthState').doc(uid).get();
-    if (!stateSnap.exists) throw new Error('No OAuth state found');
-    const { state: storedState, codeVerifier, expiresAt } = stateSnap.data();
-    if (storedState !== returnedState) throw new Error('State mismatch');
-    if (Date.now() > expiresAt)        throw new Error('OAuth state expired');
-    await adminFirestore.collection('xOAuthState').doc(uid).delete();
+    const { code, state: encodedState } = req.query;
 
-    const params = new URLSearchParams({
-      code,
-      grant_type:    'authorization_code',
-      redirect_uri:  X_REDIRECT_URI,
-      client_id:     X_CLIENT_ID,
-      code_verifier: codeVerifier,
-    });
-    const { data: tokenData } = await axios.post(X_TOKEN_URL, params.toString(), {
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        Authorization:  basicAuthHeader(),
-      },
-    });
-
-    let xUserData = { id: null, username: null, profile_image_url: null };
-    try {
-      const userRes = await axios.get(`${X_ME_URL}?user.fields=username,profile_image_url`, {
-        headers: { Authorization: `Bearer ${tokenData.access_token}` },
-        timeout: 10000,
-      });
-      xUserData = userRes.data.data || xUserData;
-    } catch (e) {
-      console.warn('[X callback] Could not fetch user profile:', e.message);
+    if (!code || !encodedState) {
+      throw new Error('Missing code or state');
     }
 
-    await tokenRef(uid).set({
-      accessToken:   encryptToken(tokenData.access_token),
-      refreshToken:  encryptToken(tokenData.refresh_token),
-      expiresAt:     Date.now() + tokenData.expires_in * 1000,
-      xUserId:       xUserData.id,
-      xUsername:     xUserData.username || 'unknown',
-      xProfileImage: xUserData.profile_image_url ?? null,
-      connectedAt:   Date.now(),
-      updatedAt:     Date.now(),
-    }, { merge: true });
+    const parsedState = JSON.parse(
+      Buffer.from(encodedState, 'base64url').toString()
+    );
 
-    res.redirect(`${FRONTEND_URL}/dashboard?x_connected=1&x_user=${encodeURIComponent(xUserData.username || 'connected')}`);
+    const { uid, state } = parsedState;
+
+    const stateDoc = await adminFirestore
+      .collection('xOAuthState')
+      .doc(uid)
+      .get();
+
+    if (!stateDoc.exists) {
+      throw new Error('OAuth state not found');
+    }
+
+    const saved = stateDoc.data();
+
+    if (saved.state !== state) {
+      throw new Error('Invalid OAuth state');
+    }
+
+    if (Date.now() > saved.expiresAt) {
+      throw new Error('OAuth state expired');
+    }
+
+    const tokenResponse = await axios.post(
+      'https://api.twitter.com/2/oauth2/token',
+      new URLSearchParams({
+        code,
+        grant_type: 'authorization_code',
+        redirect_uri: process.env.X_CALLBACK_URL,
+        code_verifier: saved.codeVerifier
+      }),
+      {
+        headers: {
+          'Content-Type':
+            'application/x-www-form-urlencoded',
+          Authorization:
+            'Basic ' +
+            Buffer.from(
+              `${process.env.X_CLIENT_ID}:${process.env.X_CLIENT_SECRET}`
+            ).toString('base64')
+        }
+      }
+    );
+
+    const {
+      access_token,
+      refresh_token,
+      expires_in
+    } = tokenResponse.data;
+
+    await adminFirestore
+      .collection('xConnections')
+      .doc(uid)
+      .set({
+        accessToken: access_token,
+        refreshToken: refresh_token,
+        expiresIn: expires_in,
+        connectedAt: Date.now()
+      });
+
+    await adminFirestore
+      .collection('xOAuthState')
+      .doc(uid)
+      .delete();
+
+    res.redirect(
+      `${saved.origin}/dashboard?x_connected=true`
+    );
+
   } catch (err) {
-    console.error('[X callback]', err?.response?.data || err);
-    res.redirect(`${FRONTEND_URL}/dashboard?x_error=callback_failed`);
+    console.error('[X callback]', err);
+
+    res.redirect(
+      `${process.env.CLIENT_URL}/dashboard?x_error=oauth_failed`
+    );
   }
 });
 
