@@ -19,7 +19,6 @@ import { attachSession }             from './services/sessionService.js';
 import { connectRedis }              from './config/redis.js';
 import { startWorker, JOBS }         from './services/jobQueue.js';
 import { apiLimiter }                from './middlewares/rateLimiter.js';
-import queueRoutes from './routes/queue.routes.js';
 import { startCronScheduler } from './services/cronService.js';
 
 const app    = express();
@@ -131,7 +130,8 @@ const bootstrap = async () => {
 │  Quotes  → /api/quotes                     │
 │  Users   → /api/users                      │
 │  Admin   → /api/admin                      │
-│  Admin   → /api/x                          │
+│  Admin   → /api/x │                        │
+│  Queue   → /api/queue                      │
 │  Admin   → /api/guest-quotes               │
 └────────────────────────────────────────────┘
     `);

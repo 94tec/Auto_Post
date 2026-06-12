@@ -29,6 +29,13 @@ const {
 
 const X_TWEET_URL = 'https://api.twitter.com/2/tweets';
 
+const REQUIRED = ['X_CLIENT_ID','X_CLIENT_SECRET','X_API_KEY','X_API_SECRET',
+                  'X_ACCESS_TOKEN','X_ACCESS_SECRET','X_TOKEN_ENCRYPT_SECRET','ADMIN_UID'];
+const missing  = REQUIRED.filter(k => !process.env[k]);
+if (missing.length) {
+  console.error('[Cron] ❌ Missing env vars:', missing.join(', '));
+}
+
 // ── Token helpers (unchanged from your original) ──────────────
 const decryptToken = (c) =>
   CryptoJS.AES.decrypt(c, X_TOKEN_ENCRYPT_SECRET).toString(CryptoJS.enc.Utf8);
